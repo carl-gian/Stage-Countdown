@@ -1,0 +1,659 @@
+import type {
+  Announcement,
+  JwLangCode,
+  JwLanguageResult,
+  MediaItemsMediator,
+  Publication,
+  PublicationFetcher,
+  PublicationFiles,
+  Release,
+} from 'src/types';
+
+import { errorCatcher } from 'src/helpers/error-catcher';
+import { maybeWarnAboutExpectedDownloadIssue } from 'src/helpers/notifications';
+import { isFetchNetworkError } from 'src/shared/network-errors';
+import { log } from 'src/shared/vanilla';
+import { addToDate, dateFromString, isInPast } from 'src/utils/date';
+import { withFetchRetry } from 'src/utils/fetch-retry';
+import { betaUpdatesDisabled } from 'src/utils/fs';
+import { isDemoModeActive } from 'stores/demo-mode';
+
+const MAX_CACHED_RESPONSE_BYTES = 1024 * 1024;
+
+// Without a TTL, a JW.org response fetched once stays cached for the rest of
+// the renderer process's life - and M³ is designed to run for long,
+// continuous sessions (a presentation computer left open for days/weeks). A
+// mid-week JW.org content correction (a fixed outline, a swapped video) would
+// otherwise never reach an already-running session. This is deliberately
+// short relative to that session length, not a long-term cache: it only
+// exists to avoid redundant re-fetches of the same URL in quick succession
+// (e.g. multiple components reading the same media-items response), not to
+// serve data indefinitely.
+const FETCH_CACHE_TTL_MS = 15 * 60 * 1000;
+
+interface CachedFetchResponse {
+  body: ArrayBuffer | null;
+  cachedAt: number;
+  headers: [string, string][];
+  status: number;
+  statusText: string;
+}
+
+const fetchCache = new Map<string, CachedFetchResponse>();
+
+function buildCachedResponse(cached: CachedFetchResponse) {
+  const body = cached.body ? cached.body.slice(0) : null;
+  return new Response(body, {
+    headers: cached.headers,
+    status: cached.status,
+    statusText: cached.statusText,
+  });
+}
+
+function buildCachedResponseFromResponse(
+  response: Response,
+  body: ArrayBuffer,
+) {
+  return new Response(body, {
+    headers: response.headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
+async function createCachedResponse(response: Response) {
+  if (!response.body) {
+    const cached = {
+      body: null,
+      cachedAt: Date.now(),
+      headers: Array.from(response.headers.entries()),
+      status: response.status,
+      statusText: response.statusText,
+    };
+
+    return {
+      cached,
+      response: buildCachedResponse(cached),
+    };
+  }
+
+  const contentLengthHeader = response.headers.get('content-length');
+  const contentLength = contentLengthHeader ? Number(contentLengthHeader) : 0;
+
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > MAX_CACHED_RESPONSE_BYTES
+  ) {
+    return { cached: null, response };
+  }
+
+  const body = await response.arrayBuffer();
+  if (body.byteLength > MAX_CACHED_RESPONSE_BYTES) {
+    return {
+      cached: null,
+      response: buildCachedResponseFromResponse(response, body),
+    };
+  }
+
+  const cached = {
+    body,
+    cachedAt: Date.now(),
+    headers: Array.from(response.headers.entries()),
+    status: response.status,
+    statusText: response.statusText,
+  };
+
+  return {
+    cached,
+    response: buildCachedResponse(cached),
+  };
+}
+
+/**
+ * Clears the fetch cache.
+ * @internal For testing purposes only.
+ */
+export const clearFetchCache = () => fetchCache.clear();
+
+// An AWS WAF bot challenge: a 2xx with no content, so `ok` alone can't
+// tell it apart from a real answer.
+const isWafChallengeResponse = (response: Response) =>
+  response.headers.get('x-amzn-waf-action') === 'challenge';
+
+/**
+ * A copy of the cached response for `cacheKey` while it's younger than the
+ * cache TTL; an older one is dropped from the cache instead.
+ * @param cacheKey The fetch cache key.
+ * @param logDetails What fetchRaw logs for a cache hit.
+ * @returns The cached response, or undefined when there's no fresh one.
+ */
+function getFreshCachedResponse(
+  cacheKey: string,
+  logDetails: { cache: boolean; init?: RequestInit; url: string },
+) {
+  const cachedResponse = fetchCache.get(cacheKey);
+  if (!cachedResponse) return undefined;
+  if (Date.now() - cachedResponse.cachedAt < FETCH_CACHE_TTL_MS) {
+    if (!import.meta.env.VITEST) {
+      log('fetchRaw (cached)', 'api', 'debug', logDetails);
+    }
+    return buildCachedResponse(cachedResponse);
+  }
+  fetchCache.delete(cacheKey);
+  return undefined;
+}
+
+/**
+ * Fetches data from the given url.
+ * @param url The url to fetch data from.
+ * @param init Initialization options for the fetch.
+ * @param cache Whether to cache the response.
+ * @returns The fetch response.
+ */
+export const fetchRaw = async (
+  url: string,
+  init?: RequestInit,
+  cache = false,
+) => {
+  // Demo mode must never reach the network (no real congregation, no real
+  // website content) — fail the same way a real offline device would, so the
+  // app's existing offline handling takes over rather than needing bespoke
+  // handling at every call site. Live: also applies while a dev has demo
+  // mode enabled at runtime via the Demo menu.
+  if (isDemoModeActive()) {
+    throw new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } });
+  }
+
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const isCacheable = cache && (method === 'GET' || method === 'HEAD');
+  const cacheKey = `${method}:${url}:${JSON.stringify(init?.headers || {})}`;
+
+  if (isCacheable) {
+    const cachedResponse = getFreshCachedResponse(cacheKey, {
+      cache,
+      init,
+      url,
+    });
+    if (cachedResponse) return cachedResponse;
+  }
+
+  if (!import.meta.env.VITEST)
+    log('fetchRaw', 'api', 'debug', { cache, init, url });
+
+  let response = await fetch(url, init);
+
+  // Some configured Website hosts answer with an empty bot-challenge page
+  // until a real browser has passed it once; the main process can, after
+  // which the same request goes through.
+  if (
+    isWafChallengeResponse(response) &&
+    (await globalThis.electronApi?.passWafChallenge?.(url))
+  ) {
+    response = await fetch(url, init);
+  }
+
+  if (isCacheable && response.ok && !isWafChallengeResponse(response)) {
+    const cachedResponse = await createCachedResponse(response);
+    if (cachedResponse.cached) {
+      fetchCache.set(cacheKey, cachedResponse.cached);
+    }
+    return cachedResponse.response;
+  }
+
+  return response;
+};
+function buildUrl(url: string, params?: URLSearchParams) {
+  if (!params?.toString()) return url;
+  return `${url}?${params.toString()}`;
+}
+
+// Publication symbols confirmed to have no media in any format via the
+// JW.org mediator API (empty result, not a fetch/parse issue) - a 400 from
+// GETPUBMEDIALINKS for these is the server correctly reporting "nothing to
+// return", not a client bug. Both 'ewt' (MMM-V2-3FK) and 'cew'
+// (MMM-V2-3KJ) are referenced by the Pioneer Service School media playlist
+// (pssmp) JWPUB and return 400 for every language and format, with an
+// empty mediator entry - school-only items with no public media. Add
+// symbols here individually rather than guessing at a broader pattern.
+const IGNORED_400_PUB_SYMBOLS = new Set(['cew', 'ewt']);
+
+export async function shouldReportCaughtError(error: unknown, online: boolean) {
+  if (!online) return false;
+
+  // Checked unconditionally (not just as a fallback when the error's shape
+  // isn't recognized) so an affected user gets the heads-up below on any
+  // caught fetch failure, not only the ones isFetchNetworkError already
+  // explains.
+  const isExpected =
+    !!(await globalThis.electronApi?.isDownloadErrorExpected());
+  if (isExpected) maybeWarnAboutExpectedDownloadIssue();
+
+  if (isFetchNetworkError(error)) return false;
+  return !isExpected;
+}
+
+// GitHub's API has brief 500 outages of its own (MMM-V2-3D2) - nothing the
+// app can act on. Kept to GitHub: a 500 from the JW.org APIs can point at a
+// bad request this app made.
+function isGitHubServerError(response: Response, url: string) {
+  return (
+    response.status === 500 && URL.parse(url)?.hostname === 'api.github.com'
+  );
+}
+
+function isIgnored400ForPub(params?: URLSearchParams) {
+  const pub = params?.get('pub');
+  if (!pub) return false;
+  if (IGNORED_400_PUB_SYMBOLS.has(pub)) return true;
+  return ['S', 'CO'].some((p) => pub.startsWith(`${p}-`));
+}
+
+function isIgnoredStatus(status: number) {
+  // 502/503/504 are all transient upstream-gateway failures (Bad Gateway /
+  // Service Unavailable / Gateway Timeout) - same class of noise.
+  return [403, 404, 429, 502, 503, 504].includes(status);
+}
+
+function isOkResponse(response: Response) {
+  return response.ok || response.status === 304;
+}
+
+function reportFetchJsonCatchError(
+  e: unknown,
+  url: string,
+  params?: URLSearchParams,
+) {
+  errorCatcher(e, {
+    contexts: {
+      fn: {
+        message: e instanceof Error ? e.message : '',
+        name: 'fetchJson',
+        params: Object.fromEntries(params || []),
+        responseUrl: buildUrl(url, params),
+        url,
+      },
+    },
+  });
+}
+
+function reportFetchJsonMainError(
+  response: Response,
+  url: string,
+  params?: URLSearchParams,
+) {
+  errorCatcher(new Error('Failed to fetch json!'), {
+    contexts: {
+      fn: {
+        headers: response.headers,
+        name: 'fetchJsonMain',
+        params: Object.fromEntries(params || []),
+        responseUrl: response.url,
+        status: response.status,
+        statusText: response.statusText,
+        type: response.type,
+        url,
+      },
+    },
+  });
+}
+
+function shouldReportStatus(
+  response: Response,
+  url: string,
+  params?: URLSearchParams,
+) {
+  if (isIgnoredStatus(response.status)) return false;
+  if (isGitHubServerError(response, url)) return false;
+  if (response.status === 400 && isIgnored400ForPub(params)) return false;
+  return true;
+}
+
+// ----------------------
+
+// Per-attempt bound so a connection that's up but never completes the
+// request doesn't hang fetchJson indefinitely - ties into withFetchRetry
+// below for free, since a timeout abort is already classified as a
+// network error by isFetchNetworkError.
+const FETCH_JSON_TIMEOUT_MS = 15_000;
+
+export const fetchJson = async <T>(
+  url: string,
+  params?: URLSearchParams,
+  online = true,
+): Promise<null | T> => {
+  if (!url) return null;
+
+  try {
+    return await withFetchRetry(async () => {
+      const fullUrl = buildUrl(url, params);
+      const response = await fetchRaw(
+        fullUrl,
+        { signal: AbortSignal.timeout(FETCH_JSON_TIMEOUT_MS) },
+        true,
+      );
+
+      if (isOkResponse(response)) {
+        return await response.json();
+      }
+
+      if (shouldReportStatus(response, url, params)) {
+        reportFetchJsonMainError(response, url, params);
+      }
+      return null;
+    });
+  } catch (e) {
+    if (await shouldReportCaughtError(e, online)) {
+      reportFetchJsonCatchError(e, url, params);
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Fetches the jw languages.
+ * @param base The base domain to fetch the languages from.
+ * @returns The jw languages.
+ */
+export const fetchJwLanguages = async (base: string) => {
+  if (!base) return;
+  const url = `https://www.${base}/en/languages/`;
+  const result = await fetchJson<JwLanguageResult>(url);
+  return result?.languages;
+};
+
+export interface YeartextResult {
+  content: string;
+  exists: boolean;
+  jsonUrl: string;
+  url: string;
+}
+
+/**
+ * Fetches the yeartext.
+ * @param wtlocale The yeartext locale.
+ * @param base The base domain to fetch the yeartext from.
+ * @param year The year to fetch the yeartext for. Defaults to current year.
+ * @returns The yeartext.
+ */
+export const fetchYeartext = async (
+  wtlocale: JwLangCode,
+  base: string,
+  year?: number,
+) => {
+  if (!base) return { wtlocale };
+  const url = `https://wol.${base}/wol/finder`;
+  const result = await fetchJson<YeartextResult>(
+    url,
+    new URLSearchParams({
+      docid: `110${year ?? new Date().getFullYear()}800`,
+      format: 'json',
+      snip: 'yes',
+      wtlocale,
+    }),
+  );
+
+  return { wtlocale, yeartext: result?.content };
+};
+
+/**
+ * Fetches the announcements from the repository.
+ * @returns The announcements.
+ */
+export const fetchAnnouncements = async (): Promise<Announcement[]> => {
+  if (!import.meta.env.repository) return [];
+  const result = await fetchJson<Announcement[]>(
+    `${import.meta.env.repository?.replace('github', 'raw.githubusercontent')}/refs/heads/master/announcements.json`,
+  );
+  return result?.filter((a) => !!a.id && !!a.message) || [];
+};
+
+/**
+ * Fetches the memorial dates from the repository.
+ * @returns The memorial dates.
+ */
+export const fetchMemorials = async (): Promise<null | Record<
+  number,
+  `${number}/${number}/${number}`
+>> => {
+  try {
+    if (!import.meta.env.repository) return null;
+    const result = await fetchJson<
+      Record<string, `${number}/${number}/${number}`>
+    >(
+      `${import.meta.env.repository?.replace('github', 'raw.githubusercontent')}/refs/heads/master/memorials.json`,
+    );
+    if (!result) return null;
+    const memorials: Record<number, `${number}/${number}/${number}`> = {};
+    for (const [key, value] of Object.entries(result)) {
+      try {
+        if (!key || !value || /[a-zA-Z]/.test(value)) continue;
+
+        const valueIsMoreThanOneMonthInPast = isInPast(
+          addToDate(dateFromString(value), { months: 1 }),
+        );
+        if (valueIsMoreThanOneMonthInPast) continue;
+
+        const year = Number.parseInt(key);
+        if (!year || Number.isNaN(year)) continue;
+
+        memorials[year] = value;
+      } catch (error) {
+        errorCatcher(error, {
+          contexts: {
+            fn: {
+              name: 'fetchMemorials loop',
+            },
+          },
+        });
+      }
+    }
+    return memorials;
+  } catch (error) {
+    errorCatcher(error, {
+      contexts: {
+        fn: {
+          name: 'fetchMemorials',
+        },
+      },
+    });
+    return null;
+  }
+};
+
+/**
+ * Fetches the release notes from the repository.
+ * @returns The release notes.
+ */
+export const fetchReleaseNotes = async (
+  lang: string,
+): Promise<null | string> => {
+  try {
+    if (!import.meta.env.repository) return null;
+    const res = await fetchRaw(
+      `${import.meta.env.repository?.replace('github', 'raw.githubusercontent')}/refs/heads/master/release-notes/${lang}.md`,
+      undefined,
+      true,
+    );
+    if (!res.ok) return null;
+    return await res.text();
+  } catch (e) {
+    if (!isFetchNetworkError(e)) errorCatcher(e);
+    return null;
+  }
+};
+
+/**
+ * Fetches the latest version of the app.
+ * @returns The latest version.
+ */
+export const fetchLatestVersion = async () => {
+  if (!import.meta.env.repository) return;
+  const url = `${import.meta.env.repository.replace('github.com', 'api.github.com/repos')}/releases`;
+  const includeBeta = !(await betaUpdatesDisabled());
+  const result = await fetchJson<Release[]>(url);
+  return result?.find((r) => includeBeta || !r.prerelease)?.tag_name.slice(1);
+};
+
+/**
+ * Builds a library filter endpoint on the configured Website. Never falls
+ * back to jw.org when a different Website is set: no base, no URL (and
+ * fetchJson('') returns null).
+ * @param base The configured base domain (e.g. `jw.org`)
+ * @param category The library category (e.g. `brochures`)
+ * @param filter The filter endpoint
+ * @returns The endpoint URL, or '' without a base
+ */
+export const getLibraryFilterUrl = (
+  base: string,
+  category: string,
+  filter: 'IssueYearViewsFilter' | 'PseudoSearchViewsFilter',
+) =>
+  base
+    ? `https://www.${base}/en/library/${category}/json/filters/${filter}/`
+    : '';
+
+/**
+ * Fetches the media links for the given publication.
+ * @param publication The publication to fetch the media links for.
+ * @param base The base domain to fetch the media links from.
+ * @param online Whether the application is online.
+ * @returns The media links.
+ */
+export const fetchPubMediaLinks = async (
+  publication: PublicationFetcher,
+  base: string,
+  online?: boolean,
+): Promise<null | Publication> => {
+  try {
+    const videoExtensions: (keyof PublicationFiles)[] = ['MP4', 'M4V'];
+    const docid = publication.docid?.toString() ?? '';
+    const hasPub = !!publication.pub;
+
+    // docid is normally preferred over pub/issue/track when available, but
+    // some media (e.g. sign-language magazine videos, which carry both a
+    // MepsDocumentId and a KeySymbol/IssueTagNumber/Track) 404 when docid is
+    // sent alongside issue/track. Fall back to pub/issue/track in that case
+    // rather than failing the lookup outright.
+    const buildParams = (useDocId: boolean) => ({
+      alllangs: '0',
+      ...(publication.booknum
+        ? { booknum: publication.booknum.toString() }
+        : {}),
+      docid: useDocId ? docid : '',
+      fileformat:
+        publication.fileformat &&
+        videoExtensions.includes(publication.fileformat)
+          ? videoExtensions.join(',')
+          : (publication.fileformat ?? ''),
+      issue: publication.issue?.toString() ?? '',
+      langwritten: publication.langwritten || '',
+      output: 'json',
+      pub: useDocId ? '' : (publication.pub ?? ''),
+      track: publication.track?.toString() ?? '',
+      txtCMSLang: 'E',
+    });
+
+    let response = await fetchJson<Publication>(
+      base,
+      new URLSearchParams(buildParams(!!docid)),
+      online,
+    );
+
+    if (!response && docid && hasPub) {
+      response = await fetchJson<Publication>(
+        base,
+        new URLSearchParams(buildParams(false)),
+        online,
+      );
+    }
+
+    if (
+      response &&
+      publication.fileformat &&
+      videoExtensions.includes(publication.fileformat)
+    ) {
+      const mappedVideoFiles = videoExtensions.map(
+        (ext) => response.files[publication.langwritten || 'E']?.[ext] || [],
+      );
+      const videoFiles = mappedVideoFiles.flat();
+      return {
+        ...response,
+        files: {
+          ...response.files,
+          [publication.langwritten || 'E']: {
+            [publication.fileformat]: videoFiles,
+          },
+        },
+      };
+    }
+
+    return response;
+  } catch (e) {
+    errorCatcher(e);
+    return null;
+  }
+};
+
+/**
+ * Fetches the media items for the given publication.
+ * @param publication The publication to fetch the media items for.
+ * @param base The base domain to fetch the media items from.
+ * @param online Whether the application is online.
+ * @returns The media items.
+ */
+export const fetchMediaItems = async (
+  publication: PublicationFetcher,
+  base: string,
+  online?: boolean,
+) => {
+  try {
+    const url = `${base}/v1/media-items/${publication.langwritten}`;
+
+    const getPublicationType = (fileformat?: string) => {
+      if (fileformat?.toLowerCase().includes('mp4')) return 'VIDEO';
+      if (fileformat?.toLowerCase().includes('mp3')) return 'AUDIO';
+      return null;
+    };
+
+    const getId = (track?: null | number | string) =>
+      [
+        publication.pub
+          ? `pub-${publication.pub}`
+          : `docid-${publication.docid}`,
+        publication.pub
+          ? publication.issue?.toString().replaceAll(/(\d{6})00$/gm, '$1')
+          : null,
+        track,
+        getPublicationType(publication.fileformat),
+      ]
+        .filter((v, i) => v != null && (v.toString() !== '0' || i === 2))
+        .join('_');
+
+    const fetchTrackMediaItems = (track?: null | number | string) =>
+      fetchJson<MediaItemsMediator>(
+        `${url}/${getId(track)}`,
+        undefined,
+        online,
+      );
+
+    let response = await fetchTrackMediaItems(publication.track);
+
+    if (!response?.media?.length && !publication.track) {
+      for (const track of ['x', 0, 1]) {
+        if (track.toString() === publication.track?.toString()) continue;
+
+        const fallbackResponse = await fetchTrackMediaItems(track); // NOSONAR: sequential - stops at first match
+        if (fallbackResponse?.media?.length) {
+          response = fallbackResponse;
+          break;
+        }
+      }
+    }
+
+    return response;
+  } catch (e) {
+    errorCatcher(e);
+    return null;
+  }
+};

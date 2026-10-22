@@ -1,0 +1,533 @@
+<template>
+  <BaseDialog v-model="dialogValue" :dialog-id="dialogId">
+    <div
+      class="bg-secondary-contrast flex large-overlay q-px-none"
+      style="flex-flow: column"
+    >
+      <!-- Header -->
+      <div
+        class="text-bigger text-semibold text-primary row q-px-md q-pt-lg items-center"
+      >
+        <q-btn
+          v-if="bibleBook"
+          :aria-label="t('back')"
+          class="q-mr-sm"
+          dense
+          :disable="isProcessing"
+          flat
+          icon="mmm-left"
+          round
+          @click="goBack"
+        >
+          <q-tooltip :delay="500">
+            {{ t('back') }}
+          </q-tooltip>
+        </q-btn>
+        <div class="icon-chip q-mr-sm">
+          <q-icon name="mmm-bible" size="xs" />
+        </div>
+        <template v-if="!bibleBook">
+          {{ t('add-media-study-bible') }}
+        </template>
+        <template v-else>
+          {{ bibleBooks[bibleBook]?.Title }}
+          <template v-if="bibleBookChapter > -1">
+            -
+            {{
+              bibleBookChapter === 0
+                ? t('introduction')
+                : t('chapter') + ' ' + bibleBookChapter
+            }}
+          </template>
+        </template>
+      </div>
+      <div class="row q-px-md q-py-md">
+        {{ t('add-media-study-bible-explain') }}
+      </div>
+      <DialogDownloadProgress
+        :label="t('loading')"
+        :loading="loadingBooks || loadingMedia"
+        progress-category="study-bible"
+      />
+
+      <!-- Content -->
+      <div class="q-px-md q-py-md col overflow-auto">
+        <!-- Loading -->
+        <div v-if="loadingBooks || loadingMedia">
+          <!-- Loading Books -->
+          <div v-if="loadingBooks">
+            <div v-for="sectionIndex in 2" :key="sectionIndex" class="q-pb-md">
+              <q-skeleton
+                class="q-my-sm"
+                height="20px"
+                type="text"
+                width="200px"
+              />
+              <div class="row q-col-gutter-xs">
+                <div
+                  v-for="bookIndex in sectionIndex === 1 ? 39 : 27"
+                  :key="bookIndex"
+                  class="col-xs-4 col-sm-3 col-md-2 col-lg-1"
+                >
+                  <q-skeleton class="full-width" height="36px" type="QBtn" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading Media -->
+          <div v-else-if="loadingMedia" class="row q-col-gutter-sm">
+            <div
+              v-for="mediaIndex in 12"
+              :key="mediaIndex"
+              class="col-6 col-sm-4 col-md-3"
+            >
+              <div class="rounded-borders-lg overflow-hidden">
+                <q-skeleton height="120px" type="rect" />
+                <div class="q-pa-sm">
+                  <q-skeleton
+                    class="q-mb-xs"
+                    height="14px"
+                    type="text"
+                    width="80%"
+                  />
+                  <q-skeleton height="12px" type="text" width="60%" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- View 1: Books -->
+        <div v-else-if="!bibleBook">
+          <div
+            v-for="(sectionInfo, sectionIndex) in [
+              {
+                title: 'hebrew-aramaic-scriptures',
+                books: bibleBooksHebrew,
+              },
+              { title: 'greek-scriptures', books: bibleBooksGreek },
+            ]"
+            :key="sectionIndex"
+            class="q-pb-md"
+          >
+            <div class="text-secondary text-uppercase q-my-sm">
+              {{ t(sectionInfo.title) }}
+            </div>
+            <div class="row q-col-gutter-xs">
+              <div
+                v-for="[bookNr, book] in Object.entries(sectionInfo.books)"
+                :key="bookNr"
+                class="col-xs-4 col-sm-3 col-md-2 col-lg-1"
+              >
+                <q-btn
+                  class="full-width"
+                  color="accent-200"
+                  :disable="isProcessing"
+                  no-caps
+                  text-color="black"
+                  unelevated
+                  @click="selectBook(parseInt(bookNr))"
+                >
+                  <div class="ellipsis">{{ book.Title }}</div>
+                </q-btn>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- View 2: Chapters -->
+        <div v-else-if="bibleBookChapter === -1" class="row q-col-gutter-xs">
+          <!-- Introduction -->
+          <div class="col-12 q-mb-sm">
+            <q-btn
+              class="full-width"
+              :class="{
+                'study-bible-chapter-unavailable': !chapterHasMedia(0),
+              }"
+              color="accent-200"
+              :disable="!chapterHasMedia(0) || isProcessing"
+              :label="t('introduction')"
+              :text-color="chapterTextColor(0)"
+              unelevated
+              @click="selectChapter(0)"
+            />
+          </div>
+          <!-- Chapters -->
+          <div
+            v-for="chapter in bibleBooks[bibleBook]?.ChapterCount || 0"
+            :key="chapter"
+            class="col-2 col-sm-1"
+          >
+            <q-btn
+              class="full-width aspect-ratio-1"
+              :class="{
+                'study-bible-chapter-unavailable': !chapterHasMedia(chapter),
+              }"
+              color="accent-200"
+              :disable="!chapterHasMedia(chapter) || isProcessing"
+              :label="chapter"
+              :text-color="chapterTextColor(chapter)"
+              unelevated
+              @click="selectChapter(chapter)"
+            />
+          </div>
+        </div>
+
+        <!-- View 3: Media -->
+        <div v-else>
+          <template
+            v-for="([label, mediaItems], index) in groupedMediaItems"
+            :key="label"
+          >
+            <div class="text-subtitle2 q-mt-md q-mb-sm text-dark-grey">
+              {{ label || t('general') }}
+            </div>
+            <div class="row q-col-gutter-sm">
+              <div
+                v-for="mediaItem in mediaItems"
+                :key="mediaItem.MultimediaId"
+                class="col-6 col-sm-4 col-md-3"
+              >
+                <q-card
+                  v-ripple
+                  class="cursor-pointer full-height"
+                  :class="{
+                    'bg-accent-200': isSelected(mediaItem),
+                    disabled: isProcessing,
+                  }"
+                  flat
+                  @click="!isProcessing && toggleSelection(mediaItem)"
+                  @mouseout="hoveredMediaItem = undefined"
+                  @mouseover="hoveredMediaItem = mediaItem"
+                >
+                  <q-img
+                    :class="{
+                      'study-bible-item': true,
+                      'study-bible-item-selected':
+                        selectedMediaItems.includes(mediaItem),
+                    }"
+                    fit="contain"
+                    :ratio="16 / 9"
+                    :src="mediaItem.CoverPictureFilePath || mediaItem.FilePath"
+                  >
+                    <q-badge
+                      v-if="mediaItem.CategoryType < 0"
+                      class="q-mt-sm q-ml-sm bg-semi-black rounded-borders-sm"
+                    >
+                      <q-icon class="q-mr-xs" color="white" name="mmm-play" />
+                      {{ t('video') }}
+                    </q-badge>
+                    <div v-if="isSelected(mediaItem)" class="grid-select-check">
+                      <q-icon color="white" name="mmm-check" size="xs" />
+                    </div>
+                    <div
+                      class="absolute-bottom text-caption gradient-transparent-to-black ellipsis q-px-sm"
+                    >
+                      {{ mediaItem.Label }}
+                    </div>
+                  </q-img>
+                </q-card>
+              </div>
+            </div>
+            <q-separator
+              v-if="index < groupedMediaItems.length - 1"
+              class="q-my-md"
+            />
+          </template>
+          <div v-if="!groupedMediaItems.length" class="text-center text-grey">
+            {{ t('no-media-found') }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Actions -->
+      <div class="row q-px-md q-py-md justify-end q-gutter-sm">
+        <q-btn
+          :disable="isProcessing"
+          flat
+          :label="t('cancel')"
+          @click="dialogValue = false"
+        />
+        <q-btn
+          v-if="selectedMediaItems.length > 0"
+          color="primary"
+          :label="t('add-count', { count: selectedMediaItems.length })"
+          :loading="isProcessing"
+          @click="addSelectedMediaItems"
+        />
+      </div>
+    </div>
+  </BaseDialog>
+</template>
+
+<script setup lang="ts">
+import type { MediaSectionIdentifier, MultimediaItem } from 'src/types';
+
+import { whenever } from '@vueuse/core';
+import BaseDialog from 'components/dialog/BaseDialog.vue';
+import DialogDownloadProgress from 'components/dialog/DialogDownloadProgress.vue';
+import { useQuasar } from 'quasar';
+import { errorCatcher } from 'src/helpers/error-catcher';
+import { getStudyBibleBooks, getStudyBibleMedia } from 'src/helpers/jw-media';
+import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+const $q = useQuasar();
+
+// Props
+const props = defineProps<{
+  dialogId: string;
+  modelValue: boolean;
+  section: MediaSectionIdentifier | undefined;
+}>();
+
+const emit = defineEmits<{
+  cancel: [];
+  import: [data: { items: MultimediaItem[] }];
+  ok: [];
+  'update:modelValue': [value: boolean];
+}>();
+
+const dialogValue = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value),
+});
+
+// State
+const bibleBook = ref(0);
+const bibleBookChapter = ref(-1);
+const loadingBooks = ref(false);
+const loadingMedia = ref(false);
+const isProcessing = ref(false);
+const bibleBooks = ref<Record<number, MultimediaItem>>({});
+const allBibleMedia = ref<MultimediaItem[]>([]);
+const selectedMediaItems = ref<MultimediaItem[]>([]);
+const hoveredMediaItem = ref<MultimediaItem>();
+const chaptersWithMedia = ref<Set<number>>(new Set());
+
+// Computed
+const bibleBooksHebrew = computed(() => {
+  return Object.fromEntries(
+    Object.entries(bibleBooks.value).filter(
+      ([bookNr]) => Number.parseInt(bookNr) < 40,
+    ),
+  );
+});
+
+const bibleBooksGreek = computed(() => {
+  return Object.fromEntries(
+    Object.entries(bibleBooks.value).filter(
+      ([bookNr]) => Number.parseInt(bookNr) >= 40,
+    ),
+  );
+});
+
+const groupedMediaItems = computed(() => {
+  const groups: Record<string, MultimediaItem[]> = {};
+
+  for (const item of allBibleMedia.value) {
+    // Group by Verse Label if available, otherwise 'General' or Title
+    const label = item.VerseNumber
+      ? bibleBookChapter.value + ':' + item.VerseNumber
+      : t('general');
+
+    groups[label] ??= [];
+    groups[label]?.push(item);
+  }
+
+  // Sort groups
+  return Object.entries(groups).sort((a, b) => {
+    const [aLabel] = a;
+    const [bLabel] = b;
+
+    // Handle "Chapter:Verse" format
+    if (aLabel.includes(':') && bLabel.includes(':')) {
+      const aParts = aLabel.split(':').map((p) => Number.parseInt(p));
+      const bParts = bLabel.split(':').map((p) => Number.parseInt(p));
+      const aVerse = aParts[1];
+      const bVerse = bParts[1];
+
+      if (
+        aVerse !== undefined &&
+        bVerse !== undefined &&
+        !Number.isNaN(aVerse) &&
+        !Number.isNaN(bVerse)
+      ) {
+        return aVerse - bVerse;
+      }
+    }
+
+    // Fallback to simple integer parse (e.g. for Chapter numbers if used elsewhere)
+    const aNum = Number.parseInt(aLabel);
+    const bNum = Number.parseInt(bLabel);
+    if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) return aNum - bNum;
+
+    if (Number.isNaN(aNum) && !Number.isNaN(bNum)) return -1;
+    if (!Number.isNaN(aNum) && Number.isNaN(bNum)) return 1;
+
+    return aLabel.localeCompare(bLabel);
+  });
+});
+
+const resetState = () => {
+  bibleBook.value = 0;
+  bibleBookChapter.value = -1;
+  selectedMediaItems.value = [];
+  allBibleMedia.value = [];
+  chaptersWithMedia.value = new Set();
+};
+
+const fetchBooks = async () => {
+  if (Object.keys(bibleBooks.value).length) return;
+  try {
+    loadingBooks.value = true;
+    bibleBooks.value = await getStudyBibleBooks();
+  } catch (error) {
+    errorCatcher(error);
+  } finally {
+    loadingBooks.value = false;
+  }
+};
+
+const fetchChapterMediaAvailability = async (bookNr: number) => {
+  try {
+    const chaptersSet = new Set<number>();
+    const result = await getStudyBibleMedia(bookNr);
+
+    result.mediaItems.forEach((item) => {
+      if (item.ChapterNumber !== undefined && item.ChapterNumber !== null) {
+        chaptersSet.add(item.ChapterNumber);
+      } else if (item.VerseLabel) {
+        const match = />(\d+):/.exec(item.VerseLabel);
+        if (match?.[1]) {
+          chaptersSet.add(Number.parseInt(match[1]));
+        }
+      }
+      // Usually intro items have ChapterNumber 0 or are in related items
+      if (item.ChapterNumber === 0) {
+        chaptersSet.add(0);
+      }
+    });
+
+    chaptersWithMedia.value = new Set([...chaptersSet].sort((a, b) => a - b));
+  } catch (error) {
+    errorCatcher(error);
+    chaptersWithMedia.value = new Set();
+  }
+};
+
+const fetchBibleBookMedia = async () => {
+  if (bibleBook.value === 0) {
+    chaptersWithMedia.value = new Set();
+    allBibleMedia.value = [];
+    return;
+  }
+
+  if (bibleBookChapter.value === -1) {
+    await fetchChapterMediaAvailability(bibleBook.value);
+    allBibleMedia.value = [];
+  } else {
+    await fetchStudyBibleMedia();
+  }
+};
+
+const selectBook = (bookNr: number) => {
+  bibleBook.value = bookNr;
+  void fetchBibleBookMedia();
+};
+
+const selectChapter = (chapter: number) => {
+  bibleBookChapter.value = chapter;
+  void fetchBibleBookMedia();
+};
+
+const chapterHasMedia = (chapter: number) =>
+  chaptersWithMedia.value.has(chapter);
+
+// A chapter with no media gets a muted gray label instead of black - the
+// "unavailable" cue - still readable on its gray button (4.5:1 or better).
+const unavailableChapterTextColor = computed(() =>
+  $q.dark.isActive ? 'grey-6' : 'grey-8',
+);
+
+const chapterTextColor = (chapter: number) => {
+  if (chapterHasMedia(chapter)) return 'black';
+  return unavailableChapterTextColor.value;
+};
+
+const fetchStudyBibleMedia = async () => {
+  try {
+    loadingMedia.value = true;
+    const result = await getStudyBibleMedia(
+      bibleBook.value,
+      bibleBookChapter.value,
+    );
+    allBibleMedia.value = result.mediaItems;
+  } catch (error) {
+    errorCatcher(error);
+  } finally {
+    loadingMedia.value = false;
+  }
+};
+
+const goBack = () => {
+  if (bibleBookChapter.value > -1) {
+    bibleBookChapter.value = -1;
+  } else {
+    bibleBook.value = 0;
+  }
+};
+
+const toggleSelection = (item: MultimediaItem) => {
+  const index = selectedMediaItems.value.indexOf(item);
+  if (index > -1) {
+    selectedMediaItems.value.splice(index, 1);
+  } else {
+    selectedMediaItems.value.push(item);
+  }
+};
+
+const isSelected = (item: MultimediaItem) => {
+  return selectedMediaItems.value.includes(item);
+};
+
+const addSelectedMediaItems = () => {
+  // ✅ Emit raw MultimediaItems - parent handles image conversion and video downloads
+  emit('import', { items: [...selectedMediaItems.value] });
+  resetState();
+  dialogValue.value = false;
+};
+
+// Methods
+whenever(
+  () => props.modelValue,
+  async () => {
+    resetState();
+    await fetchBooks();
+  },
+);
+</script>
+
+<style scoped>
+.study-bible-item :deep(img) {
+  background-color: white;
+}
+
+body.body--dark .study-bible-item :deep(img) {
+  background-color: #2a2a2a;
+}
+
+/* .q-btn outranks the button's own bg-accent-200 color class
+   (body.body--light .bg-accent-200) without needing !important. The label's
+   gray comes from the button's text-color (chapterTextColor), and its full
+   opacity from app.scss. */
+.q-btn.study-bible-chapter-unavailable {
+  background-color: #e0e0e0;
+}
+
+body.body--dark .study-bible-chapter-unavailable {
+  background-color: #343434;
+}
+</style>

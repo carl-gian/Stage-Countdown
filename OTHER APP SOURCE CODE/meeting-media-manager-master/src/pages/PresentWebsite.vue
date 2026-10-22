@@ -1,0 +1,138 @@
+<template>
+  <q-page padding>
+    <q-list>
+      <div class="media-section website">
+        <q-item class="text-website items-center">
+          <q-avatar class="text-white bg-website" size="md">
+            <q-icon name="mmm-open-web" size="sm" />
+          </q-avatar>
+          <div class="section-title">
+            {{ t('titles.presentWebsite') }}
+          </div>
+        </q-item>
+        <q-item>
+          <q-item-section>
+            <p class="q-mb-sm">
+              {{
+                t(
+                  'when-you-click-the-button-on-the-top-right-corner-of-this-window-a-new-window-will-open-where-the-website-will-be-presented-what-you-see-in-this-window-will-be-mirrored-into-the-media-window',
+                )
+              }}
+            </p>
+            <p class="q-mb-sm">
+              {{ t('you-can-navigate-the-website-before-presenting-it') }}
+            </p>
+            <p class="q-mb-sm">
+              {{
+                t(
+                  'while-the-website-window-is-open-zoom-and-navigation-buttons-are-available-in-the-top-right-corner-of-this-window',
+                )
+              }}
+            </p>
+            <p class="q-mb-none">
+              {{
+                t(
+                  'when-you-are-done-presenting-the-website-you-can-either-close-the-website-window-or-click-again-on-the-button-in-the-top-right-corner-of-this-window',
+                )
+              }}
+            </p>
+          </q-item-section>
+        </q-item>
+      </div>
+      <div class="media-section website">
+        <q-item class="text-website items-center">
+          <q-avatar class="text-white bg-website" size="md">
+            <q-icon name="mmm-sites" size="sm" />
+          </q-avatar>
+          <div class="section-title">
+            {{ t('websiteSelection') }}
+          </div>
+        </q-item>
+        <q-item>
+          <q-item-section>
+            <q-option-group
+              v-model="websiteSelection"
+              color="primary"
+              :disable="websiteIsVisible"
+              :options="websiteOptions"
+            />
+          </q-item-section>
+        </q-item>
+      </div>
+      <div class="media-section website">
+        <q-item class="text-website items-center">
+          <q-avatar class="text-white bg-website" size="md">
+            <q-icon name="mmm-tune" size="sm" />
+          </q-avatar>
+          <div class="section-title">
+            {{ t('settings') }}
+          </div>
+        </q-item>
+        <q-item>
+          <q-item-section>
+            <q-item-label>{{ t('autoReturnFromWebsite') }}</q-item-label>
+            <q-item-label caption>
+              {{ t('autoReturnFromWebsiteDescription') }}
+            </q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <q-toggle v-model="autoReturnFromWebsite" color="primary" />
+          </q-item-section>
+        </q-item>
+      </div>
+    </q-list>
+  </q-page>
+</template>
+<script setup lang="ts">
+import { watchImmediate } from '@vueuse/core';
+import { storeToRefs } from 'pinia';
+import { useMeta } from 'quasar';
+import { isSiteAvailable } from 'src/utils/website';
+import { useCurrentStateStore } from 'stores/current-state';
+import { computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+const currentState = useCurrentStateStore();
+const {
+  autoReturnFromWebsite,
+  currentSettings,
+  mediaPlaying,
+  websiteSelection,
+} = storeToRefs(currentState);
+
+const websiteIsVisible = computed(() => {
+  return (mediaPlaying.value?.action || '').toLowerCase().includes('website');
+});
+
+// JW Stream and the conventions site are jw.org's own: only offered when
+// the Website is jw.org.
+const websiteOptions = computed(() =>
+  (
+    [
+      { label: t('mainOfficialWebsite'), value: undefined },
+      { label: t('jweventSite'), value: 'jwevent' },
+      { label: t('jwStreamSite'), value: 'stream' },
+    ] as const
+  ).filter((option) => isSiteAvailable(option.value, currentSettings.value)),
+);
+
+useMeta({ title: t('titles.presentWebsite') });
+
+const { askForMediaAccess } = globalThis.electronApi;
+
+onMounted(() => {
+  askForMediaAccess();
+});
+
+// A Stream/Conventions choice made under jw.org falls back to the main site
+// once the Website changes.
+watchImmediate(
+  () => currentSettings.value?.baseUrl,
+  () => {
+    if (!isSiteAvailable(websiteSelection.value, currentSettings.value)) {
+      websiteSelection.value = undefined;
+    }
+  },
+);
+</script>

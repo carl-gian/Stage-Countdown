@@ -1,0 +1,139 @@
+import type { DateLocale } from 'quasar';
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  dateFromString,
+  datesAreSame,
+  friendlyDayToJsDay,
+  getLocalDate,
+  getSpecificWeekday,
+  isInPast,
+} from '../date';
+import { pad } from '../general';
+
+describe('friendlyDayToJsDay', () => {
+  // Friendly days: Mon-Sun = 0-6
+  // JS days: Sun-Mon = 0-6
+  it('should convert dates correctly', () => {
+    expect(friendlyDayToJsDay(0)).toBe(1);
+    expect(friendlyDayToJsDay(3)).toBe(4);
+    expect(friendlyDayToJsDay(6)).toBe(0);
+  });
+});
+
+describe('datesAreSame', () => {
+  it('should return true if dates are the same', () => {
+    const date1 = new Date(2025, 0, 15, 12, 0, 0, 0); // Jan 15, 2025 12:00
+    const date2 = new Date(date1);
+    const date3 = new Date(date1);
+    date3.setHours(13); // Jan 15, 2025 13:00
+    expect(datesAreSame(date1, date2)).toBe(true); // same calendar day
+    expect(datesAreSame(date1, date3)).toBe(true); // same calendar day
+  });
+
+  it('should return false if dates are not the same', () => {
+    const date1 = new Date(2025, 0, 15, 12, 0, 0, 0); // Jan 15, 2025 12:00
+    const date2 = new Date(date1);
+    const date3 = new Date(date1);
+    date2.setFullYear(date1.getFullYear() - 1); // Dec 15, 2024 12:00
+    date3.setDate(date1.getDate() + 1); // Jan 16, 2025 12:00
+    expect(datesAreSame(date1, date2)).toBe(false); // different calendar day
+    expect(datesAreSame(date1, date3)).toBe(false); // different calendar day
+  });
+});
+
+describe('isInPast', () => {
+  it('should work for past dates', () => {
+    const date = new Date(2024, 11, 15, 12, 0, 0, 0); // Dec 15, 2024 12:00
+    expect(isInPast(date)).toBe(true); // Dec 15, 2024 12:00 is in the past
+  });
+
+  it('should work for future dates', () => {
+    const date = new Date(2035, 0, 15, 12, 0, 0, 0); // Jan 15, 2035 12:00
+    expect(isInPast(date)).toBe(false); // Jan 15, 2035 12:00 is not in the past
+  });
+
+  it('should work for today', () => {
+    const today = new Date();
+    expect(isInPast(today)).toBe(false); // today is not in the past
+    expect(isInPast(today, true)).toBe(true); // today is in the past when including today param
+  });
+});
+
+describe('getLocalDate', () => {
+  it('should return the local date', async () => {
+    const { default: messages } = await import('./../../i18n/nl.json');
+    const locale: Required<DateLocale> = {
+      days: messages['days-long'].split('_'),
+      daysShort: messages['days-short'].split('_'),
+      months: messages['months-long'].split('_'),
+      monthsShort: messages['months-short'].split('_'),
+    };
+
+    const date = new Date();
+    const dateString = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+
+    const localDate = getLocalDate(date, locale);
+    const localDateFromString = getLocalDate(dateString, locale);
+    expect(localDate).toBe(localDateFromString);
+    expect(localDate).toBe(
+      `${date.getDate()} ${locale.months[date.getMonth()]} ${date.getFullYear()}`,
+    );
+  });
+});
+
+describe('getSpecificWeekday', () => {
+  it('should return the date of the specific weekday', () => {
+    const date = new Date();
+    const monday = getSpecificWeekday(date, 0);
+    expect(monday.getDay()).toBe(1);
+
+    // Check that the date is in the correct week
+    expect(
+      +`${monday.getFullYear()}${pad(monday.getMonth())}${pad(monday.getDate())}`,
+    ).toBeLessThanOrEqual(
+      +`${date.getFullYear()}${pad(date.getMonth())}${pad(date.getDate())}`,
+    );
+
+    const thursday = getSpecificWeekday(date, 3);
+    expect(thursday.getDay()).toBe(4);
+
+    const sunday = getSpecificWeekday(date, 6);
+    expect(sunday.getDay()).toBe(0);
+
+    // Check that the date is in the correct week
+    expect(
+      +`${sunday.getFullYear()}${pad(sunday.getMonth())}${pad(sunday.getDate())}`,
+    ).toBeGreaterThanOrEqual(
+      +`${date.getFullYear()}${pad(date.getMonth())}${pad(date.getDate())}`,
+    );
+  });
+});
+
+describe('dateFromString', () => {
+  it.each(['20210301', '2021-03-01', '2021/03/01'])(
+    'should convert %s to date',
+    (dateString) => {
+      const date = dateFromString(dateString);
+      expect(date.getFullYear()).toBe(2021);
+      expect(date.getMonth()).toBe(2);
+      expect(date.getDate()).toBe(1);
+    },
+  );
+
+  it('should convert ISO to date', () => {
+    const today = new Date();
+    const date = dateFromString(today.toISOString());
+    expect(date.getFullYear()).toBe(today.getFullYear());
+    expect(date.getMonth()).toBe(today.getMonth());
+    expect(date.getDate()).toBe(today.getDate());
+  });
+
+  it('should reset the time to 00:00:00', () => {
+    const date = dateFromString(new Date());
+    expect(date.getHours()).toBe(0);
+    expect(date.getMinutes()).toBe(0);
+    expect(date.getSeconds()).toBe(0);
+  });
+});

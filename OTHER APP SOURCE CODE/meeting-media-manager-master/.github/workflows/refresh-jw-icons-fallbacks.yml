@@ -1,0 +1,58 @@
+name: Refresh jw-icons fallback glyph map
+
+on:
+  schedule:
+    - cron: '0 7 1 * *'
+  workflow_dispatch:
+
+jobs:
+  refresh-jw-icons-fallbacks:
+    runs-on: ubuntu-latest
+    if: github.repository == 'sircharlo/meeting-media-manager'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: 'yarn'
+
+      # The refresh script is plain JavaScript (fontkit), and this job holds
+      # a write token, so the dependencies' install/postinstall scripts are
+      # skipped: a compromised package then gets no chance to run code at
+      # install time. --mode=skip-build is Yarn 4's install flag for that,
+      # and YARN_ENABLE_SCRIPTS=false the config-level equivalent.
+      - name: Install dependencies
+        env:
+          YARN_ENABLE_SCRIPTS: 'false'
+        run: yarn install --mode=skip-build
+
+      - name: Run refresh-jw-icons-fallbacks script
+        run: yarn refresh:jw-icons-fallbacks
+
+      - name: Format generated file with Prettier
+        run: yarn dlx prettier@3.9.6 --write src/constants/jw-icons.ts
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet -- src/constants/jw-icons.ts; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open pull request with refreshed fallback glyphs
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          add-paths: src/constants/jw-icons.ts
+          body-path: jw-icons-refresh-summary.md
+          branch: chore/refresh-jw-icons-fallbacks
+          commit-message: 'chore: refresh jw-icons fallback glyph map'
+          title: 'chore: refresh jw-icons fallback glyph map'

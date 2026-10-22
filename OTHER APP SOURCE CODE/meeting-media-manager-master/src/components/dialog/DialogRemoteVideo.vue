@@ -1,0 +1,339 @@
+<template>
+  <BaseDialog v-model="dialogValue" :dialog-id="dialogId">
+    <div
+      class="bg-secondary-contrast flex large-overlay q-px-none medium-overlay"
+      style="flex-flow: column"
+    >
+      <div
+        class="text-bigger text-semibold text-primary row q-px-md q-pt-lg items-center"
+      >
+        <div class="icon-chip q-mr-sm">
+          <q-icon name="mmm-movie" size="xs" />
+        </div>
+        <div class="col">
+          {{ t('add-video-jw-org') }}
+        </div>
+        <div class="col-shrink">
+          <q-btn
+            :aria-label="t('click-to-refresh-list')"
+            color="primary"
+            flat
+            icon="mmm-cloud-done"
+            :loading="videosAreLoading"
+            round
+            @click="refreshVideos"
+          >
+            <q-tooltip :delay="500">
+              {{ t('click-to-refresh-list') }}
+            </q-tooltip>
+          </q-btn>
+        </div>
+      </div>
+      <div class="row q-px-md q-pt-md">
+        {{ t('add-a-video-explain') }}
+      </div>
+      <div class="row q-px-md q-py-md">
+        <div class="col-grow">
+          <q-input
+            v-model="remoteVideoFilter"
+            autofocus
+            clearable
+            dense
+            :label="t('search')"
+            outlined
+            spellcheck="false"
+          >
+            <template #prepend>
+              <q-icon name="mmm-search" />
+            </template>
+          </q-input>
+        </div>
+      </div>
+      <div
+        v-if="videosAreLoading && !remoteVideosFiltered?.length"
+        class="q-px-md row q-col-gutter-md"
+      >
+        <div
+          v-for="videoIndex in 6"
+          :key="videoIndex"
+          class="col-xs-6 col-sm-4 col-md-3 col-lg-2"
+        >
+          <div class="rounded-borders-lg overflow-hidden">
+            <q-skeleton style="height: 150px" type="rect" />
+            <div class="q-pa-sm">
+              <q-skeleton height="14px" type="text" width="90%" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="q-px-md overflow-auto row">
+        <template
+          v-for="video in remoteVideosFiltered.slice(
+            (currentPage - 1) * videosPerPage,
+            currentPage * videosPerPage,
+          )"
+          :key="video.guid"
+        >
+          <div class="col col-xs-6 col-sm-4 col-md-3 col-lg-2">
+            <q-item
+              :class="{
+                'q-pa-none': true,
+                'rounded-borders-lg': true,
+                'full-height': true,
+                'bg-accent-100': hoveredRemoteVideo === video.guid,
+              }"
+              clickable
+              :disable="isProcessing"
+              style="min-height: 0"
+              @click="addVideo(video)"
+              @mouseout="hoveredRemoteVideo = ''"
+              @mouseover="hoveredRemoteVideo = video.guid"
+            >
+              <q-card-section class="q-pa-sm full-width">
+                <q-img
+                  class="rounded-borders"
+                  :src="getBestImageUrl(video.images, 'md', true)"
+                >
+                  <q-badge
+                    class="q-mt-sm q-ml-sm bg-semi-black rounded-borders-sm"
+                    style="padding: 5px"
+                  >
+                    <q-icon class="q-mr-xs" color="white" name="mmm-play" />
+                    {{ formatTime(video.duration) }}
+                  </q-badge>
+                  <div
+                    class="absolute-bottom text-caption gradient-transparent-to-black"
+                  >
+                    {{ video.title }}
+                  </div>
+                  <q-tooltip :delay="1000">
+                    {{ video.naturalKey }}
+                  </q-tooltip>
+                </q-img>
+              </q-card-section>
+            </q-item>
+          </div>
+        </template>
+      </div>
+      <div class="row q-px-md q-py-md justify-center">
+        <q-pagination
+          v-model="currentPage"
+          active-color="primary"
+          color="secondary"
+          direction-links
+          flat
+          :max="Math.ceil(remoteVideosFiltered.length / videosPerPage)"
+          :max-pages="10"
+        />
+      </div>
+      <div class="q-px-md q-py-md row">
+        <div class="col">
+          <q-toggle
+            v-model="remoteVideosIncludeAudioDescription"
+            checked-icon="mmm-check"
+            color="primary"
+            :label="t('include-audio-description')"
+          />
+        </div>
+        <div class="col text-right">
+          <q-btn flat :label="t('cancel')" @click="cancelDialog" />
+        </div>
+      </div>
+    </div>
+  </BaseDialog>
+</template>
+<script setup lang="ts">
+import type {
+  JwVideoCategory,
+  MediaItemsMediatorItem,
+  MediaSectionIdentifier,
+} from 'src/types';
+
+import BaseDialog from 'components/dialog/BaseDialog.vue';
+import { storeToRefs } from 'pinia';
+import { errorCatcher } from 'src/helpers/error-catcher';
+import { getBestImageUrl } from 'src/helpers/jw-media';
+import { fetchJson } from 'src/utils/api';
+import { formatTime } from 'src/utils/time';
+import { useCurrentStateStore } from 'stores/current-state';
+import { useJwStore } from 'stores/jw';
+import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
+// Stores
+const jwStore = useJwStore();
+const { urlVariables } = storeToRefs(jwStore);
+
+const currentState = useCurrentStateStore();
+const { currentSettings, online } = storeToRefs(currentState);
+
+// Props
+const props = defineProps<{
+  dialogId: string;
+  modelValue: boolean;
+  section: MediaSectionIdentifier | undefined;
+}>();
+
+const emit = defineEmits<{
+  cancel: [];
+  import: [
+    data: {
+      mediaItemLinks: MediaItemsMediatorItem['files'];
+      thumbnailUrl?: string;
+      title?: string;
+    },
+  ];
+  ok: [];
+  'update:modelValue': [value: boolean];
+}>();
+
+const dialogValue = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value),
+});
+
+const remoteVideos = ref<MediaItemsMediatorItem[]>([]);
+const remoteVideoFilter = ref('');
+const remoteVideosIncludeAudioDescription = ref(false);
+const hoveredRemoteVideo = ref('');
+
+const remoteVideosFiltered = computed(() => {
+  const useableVideos = ref(
+    remoteVideos.value.filter(
+      (v) =>
+        remoteVideosIncludeAudioDescription.value ||
+        !v.primaryCategory.endsWith('AD'),
+    ),
+  );
+
+  if (remoteVideoFilter.value?.length > 2) {
+    // Split the filter string into terms (space-separated)
+    const searchTerms = remoteVideoFilter.value
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean); // Remove empty terms
+
+    // Check if all search terms are present
+    useableVideos.value = useableVideos.value.filter((video) =>
+      searchTerms.every((term) => video.title.toLowerCase().includes(term)),
+    );
+  }
+
+  return useableVideos.value;
+});
+const videosAreLoading = ref(false);
+const isProcessing = ref(false);
+const currentPage = ref(1);
+const videosPerPage = ref(24);
+
+const cancelDialog = () => {
+  // Reset state when dialog is cancelled
+  resetDialogState();
+  dialogValue.value = false;
+  emit('cancel');
+};
+
+const resetDialogState = () => {
+  // Reset all dialog state
+  remoteVideoFilter.value = '';
+  remoteVideosIncludeAudioDescription.value = false;
+  hoveredRemoteVideo.value = '';
+  currentPage.value = 1;
+};
+
+const getJwVideos = async () => {
+  try {
+    if (!currentSettings.value) return;
+
+    videosAreLoading.value = true;
+
+    const getSubcategories = async (category: string) => {
+      if (!category) return null;
+      return await fetchJson<JwVideoCategory>(
+        `${urlVariables.value.mediator}/v1/categories/${
+          currentSettings.value?.lang
+        }/${category}`,
+        new URLSearchParams({
+          clientType: 'www',
+          detailed: '1',
+          mediaLimit: '0',
+        }),
+        online.value,
+      );
+    };
+    const getCategoryVideos = async (category: string) =>
+      await fetchJson<JwVideoCategory>(
+        `${urlVariables.value.mediator}/v1/categories/${
+          currentSettings.value?.lang
+        }/${category}`,
+        new URLSearchParams({
+          clientType: 'www',
+          detailed: '0',
+        }),
+        online.value,
+      );
+    const subcategories: {
+      key: string;
+      parentCategory: string;
+    }[] = [{ key: 'LatestVideos', parentCategory: '' }];
+    const subcategoriesRequest = await getSubcategories('VideoOnDemand');
+    const subcategoriesFirstLevel =
+      subcategoriesRequest?.category?.subcategories?.map((s) => s.key) || [];
+    for (const subcategoryFirstLevel of subcategoriesFirstLevel) {
+      const subRequest = await getSubcategories(subcategoryFirstLevel); // NOSONAR: sequential - one JW.org lookup at a time
+      subcategories.push(
+        ...(subRequest?.category.subcategories.map((s) => {
+          return { key: s.key, parentCategory: subcategoryFirstLevel };
+        }) || []),
+      );
+    }
+    for (const category of subcategories) {
+      if (!category?.key) continue;
+      const request = await getCategoryVideos(category.key); // NOSONAR: sequential - one JW.org lookup at a time
+      const newVideos = (request?.category?.media || []).filter(
+        (video) => !remoteVideos.value.some((v) => v.guid === video.guid),
+      );
+      remoteVideos.value.push(...newVideos);
+      remoteVideos.value.sort((a, b) =>
+        b.firstPublished.localeCompare(a.firstPublished),
+      );
+    }
+  } catch (error) {
+    errorCatcher(error);
+  } finally {
+    videosAreLoading.value = false;
+  }
+};
+
+const refreshVideos = async () => {
+  if (videosAreLoading.value) return;
+  remoteVideos.value = [];
+  await getJwVideos();
+};
+
+const addVideo = (video: MediaItemsMediatorItem) => {
+  // ✅ Always emit - parent handles section assignment
+  emit('import', {
+    mediaItemLinks: video.files,
+    thumbnailUrl: getBestImageUrl(video.images, 'md'),
+    title: video.title,
+  });
+  dialogValue.value = false;
+  emit('ok');
+};
+
+// Watch for dialog opening to get JW videos and closing to reset state
+watch(
+  () => dialogValue.value,
+  (isOpen) => {
+    if (isOpen) {
+      void getJwVideos();
+    } else {
+      // Reset state when dialog closes
+      resetDialogState();
+    }
+  },
+);
+</script>

@@ -1,0 +1,36 @@
+import { log } from 'src/shared/vanilla';
+import { vi } from 'vitest';
+
+import { initHttpHandlers } from './../mocks/http';
+
+vi.mock('src-electron/main/utils', async (importOriginal) => {
+  const mod = await importOriginal<object>();
+  return {
+    ...mod,
+    captureElectronError: vi.fn(async (error: unknown) => {
+      if (
+        error instanceof Error &&
+        error.message === 'Function not implemented.'
+      ) {
+        log(error);
+      }
+    }),
+  };
+});
+
+vi.mock('src-electron/preload/log', async (importOriginal) => {
+  const mod = await importOriginal<object>();
+  return {
+    ...mod,
+    capturePreloadError: vi.fn(async (error: unknown) => {
+      if (
+        error instanceof Error &&
+        error.message === 'Function not implemented.'
+      ) {
+        log(error);
+      }
+    }),
+  };
+});
+
+initHttpHandlers([]);

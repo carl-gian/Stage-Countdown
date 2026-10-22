@@ -1,0 +1,239 @@
+import type { ElectronIpcListenKey, JwSiteParams } from 'src/types';
+
+import {
+  app,
+  BrowserWindow,
+  type BrowserWindowConstructorOptions,
+} from 'electron';
+import {
+  IS_BETA,
+  IS_DEMO_MODE,
+  IS_DEV,
+  PLATFORM,
+  PRODUCT_NAME,
+} from 'src-electron/constants';
+import { readJsonResilient } from 'src-electron/main/resilient-storage';
+import { urlVariables } from 'src-electron/main/session';
+import { captureElectronError, getIconPath } from 'src-electron/main/utils';
+import {
+  StatefulBrowserWindow,
+  type WindowState,
+} from 'src-electron/main/window/window-state';
+import { log } from 'src/shared/vanilla';
+import { join, resolve } from 'upath';
+
+export function closeOtherWindows(source: BrowserWindow) {
+  try {
+    const windows = BrowserWindow.getAllWindows();
+    for (const win of windows) {
+      if (win !== source && !win.isDestroyed()) win.close();
+    }
+  } catch (e) {
+    captureElectronError(e, {
+      contexts: { fn: { name: 'closeOtherWindows' } },
+    });
+  }
+}
+
+/**
+ * Creates a new browser window
+ * @param name The name of the window
+ * @param options The options for the window
+ * @param defaultHeight The default height of the window
+ * @param defaultWidth The default width of the window
+ * @returns The created window
+ */
+export function createWindow(
+  name: 'main' | 'media' | 'timer' | 'website' = 'main',
+  options?: BrowserWindowConstructorOptions,
+  websiteParams?: JwSiteParams,
+) {
+  const defaultSize = { height: 600, width: 1000 };
+
+  // Create the browser window
+  const opts: BrowserWindowConstructorOptions = {
+    acceptFirstMouse: true,
+    autoHideMenuBar: true,
+    backgroundColor: 'grey',
+    height: defaultSize.height,
+    icon: getIconPath(IS_BETA ? 'beta' : 'icon'),
+    minHeight: 450,
+    minWidth: 500,
+    show: false,
+    title: PRODUCT_NAME,
+    width: defaultSize.width,
+    ...options,
+    webPreferences: {
+      backgroundThrottling: false,
+      contextIsolation: true,
+      preload:
+        name === 'website'
+          ? undefined
+          : join(import.meta.dirname, 'electron-preload.cjs'),
+      sandbox: name === 'website',
+      webSecurity: !IS_DEV,
+      ...options?.webPreferences,
+    },
+  };
+  const win =
+    name === 'website'
+      ? new BrowserWindow(opts)
+      : new StatefulBrowserWindow({
+          configFileName: `${name}-window-state.json`,
+          configFilePath: app.getPath('userData'),
+          ...opts,
+        }).win;
+
+  // Show the window when it's ready
+  win.on('ready-to-show', () => {
+    if (name === 'media') return;
+    if (name === 'timer') {
+      win.showInactive();
+      return;
+    }
+    win.show();
+  });
+
+  // Hide the menu bar
+  if (
+    PLATFORM !== 'darwin' &&
+    (name !== 'main' || !import.meta.env.QUASAR_DEBUG)
+  ) {
+    win.setMenuBarVisibility(false);
+  }
+
+  // Load the app
+  let page = IS_DEMO_MODE
+    ? 'media-calendar/initial'
+    : 'initial-congregation-selector';
+  switch (name) {
+    case 'media':
+      page = 'media-player';
+      break;
+    case 'timer':
+      page = 'timer';
+      break;
+    case 'website':
+      page = buildWebsitePage(websiteParams, urlVariables?.base);
+      break;
+  }
+  const captureLoadError = (error: unknown) => {
+    captureElectronError(error, {
+      contexts: { fn: { name: 'createWindow', window: name } },
+    });
+  };
+  if (page.startsWith('https://') || page === 'about:blank') {
+    win.loadURL(page).catch(captureLoadError);
+  } else if (import.meta.env.QUASAR_DEV) {
+    win
+      .loadURL(import.meta.env.QUASAR_APP_URL + `?page=${page}`)
+      .catch(captureLoadError);
+  } else {
+    // Use absolute path for index.html in production builds
+    const indexPath = resolve(app.getAppPath(), 'index.html');
+    win.loadFile(indexPath, { hash: `?page=${page}` }).catch(captureLoadError);
+  }
+
+  // Devtools
+  let devToolsOpenedCount = 0; // Track the number of times the devtools-opened event is fired
+  if (import.meta.env.QUASAR_DEBUG) {
+    win.webContents.openDevTools(); // I like having dev tools open for all windows in dev
+  } else {
+    // Prevent devtools from being opened in production unless it's attempted more than twice
+    win.webContents.on('devtools-opened', () => {
+      devToolsOpenedCount += 1; // Increment the counter
+      if (devToolsOpenedCount <= 2) {
+        win?.webContents.closeDevTools(); // Close devtools for the first two attempts
+      } else {
+        log('DevTools opened after 2 attempts', 'electronWindow', 'debug'); // Log for debugging
+      }
+    });
+  }
+
+  return win;
+}
+
+export async function loadWindowPrefs(
+  windowName: 'main' | 'media' | 'timer',
+): Promise<null | WindowState> {
+  const configFileName = `${windowName}-window-state.json`;
+  const userDataPath = app.getPath('userData');
+
+  try {
+    const state = await readJsonResilient(userDataPath, configFileName);
+    if (!state) {
+      log(
+        '[loadWindowPrefs - ' + windowName + '] File does not exist:',
+        'electronWindow',
+        'log',
+        join(userDataPath, configFileName),
+      );
+      return null;
+    }
+    return state as WindowState;
+  } catch (e) {
+    captureElectronError(e, {
+      contexts: {
+        fn: {
+          name: 'loadWindowPrefs - ' + windowName,
+          path: join(userDataPath, configFileName),
+        },
+      },
+    });
+    return null;
+  }
+}
+
+export function logToWindow(
+  win: BrowserWindow | null,
+  msg: string,
+  ctx: boolean | number | Record<string, unknown> | string = {},
+  level: 'debug' | 'error' | 'info' | 'warn' = 'info',
+) {
+  if (level === 'debug' && !import.meta.env.QUASAR_DEBUG) return;
+  sendToWindow(win, 'log', { ctx, level, msg });
+}
+
+export function sendToWindow(
+  win: BrowserWindow | null,
+  channel: ElectronIpcListenKey,
+  ...args: unknown[]
+) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  win.webContents.send(channel, ...args);
+}
+
+/**
+ * Builds the URL/page string for the `website` window from its site
+ * selection and language symbol.
+ *
+ * SEC-13 (full-audit-2026-09-05.md): `langSymbol` normally comes from the
+ * app's own enabled-language list, but reaches here over the raw IPC
+ * channel - encoded rather than trusted to already be URL-safe.
+ */
+function buildWebsitePage(
+  websiteParams: JwSiteParams | undefined,
+  base: string | undefined,
+) {
+  const langSymbol = encodeURIComponent(websiteParams?.langSymbol ?? '');
+  if (websiteParams?.site) {
+    // JW Stream and the conventions site are jw.org's own: never opened for
+    // a different Website.
+    if (base !== 'jw.org') return 'about:blank';
+
+    const siteUrlBySelection = {
+      jwevent: 'https://www.jwevent.org/',
+      stream: 'https://stream.jw.org/',
+    } as const;
+
+    return `${siteUrlBySelection[websiteParams.site]}?lang=${langSymbol}`;
+  }
+  // Never jw.org in place of a different Website: without a known base
+  // (not sent yet, or the configured one was invalid) show nothing.
+  if (!base) return 'about:blank';
+  return `https://www.${base}/${langSymbol}`;
+}
+
+export const __testables = {
+  buildWebsitePage,
+};

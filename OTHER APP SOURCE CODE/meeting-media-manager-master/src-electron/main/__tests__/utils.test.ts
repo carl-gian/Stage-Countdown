@@ -1,0 +1,444 @@
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'upath';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockAppPath = '/mock/app/resources/app';
+
+vi.mock('electron', () => ({
+  app: {
+    getAppPath: vi.fn(() => mockAppPath),
+    getPath: vi.fn(),
+    getVersion: vi.fn(),
+    once: vi.fn(),
+  },
+}));
+
+vi.mock('#q-app/electron/main', () => ({
+  resolveElectronAssetsPath: vi.fn((...args: string[]) =>
+    ['electron-assets', ...args].join('/'),
+  ),
+}));
+
+vi.mock('@sentry/electron/main', () => ({
+  captureException: vi.fn(),
+}));
+
+vi.mock('src-electron/main/session', () => ({
+  urlVariables: {},
+}));
+
+vi.mock('is-online', () => ({
+  default: vi.fn(),
+}));
+
+vi.mock('app/package.json', () => ({
+  version: '1.0.0',
+}));
+
+import {
+  fetchJsonFromMainProcess,
+  isIgnoredUnhandledNetworkEvent,
+  isIgnoredUpdateError,
+  isJwDomain,
+  isSelf,
+  isTrustedDomain,
+  isTrustedNavigationTarget,
+  isUpdaterFullDownloadFallbackError,
+  markUpdaterFullDownloadFallback,
+  utils,
+} from '../utils';
+
+// SEC-10 (full-audit-2026-09-05.md): previously matched any local file
+// merely ending in the literal substring "index.html" - not anchored to the
+// app's actual bundled index.html path at all. Both the "expected" and
+// "actual" paths below go through the same resolve()/pathToFileURL()
+// transformation as the real code, so the assertions hold regardless of
+// which OS runs the test.
+describe('isSelf', () => {
+  it("accepts the app's real, resolved index.html path", () => {
+    const realIndexPath = resolve(mockAppPath, 'index.html');
+    expect(isSelf(pathToFileURL(realIndexPath).href)).toBe(true);
+  });
+
+  it('rejects a different local file that merely ends in "index.html"', () => {
+    const lookalikePath = resolve(mockAppPath, 'foo', 'myindex.html');
+    expect(isSelf(pathToFileURL(lookalikePath).href)).toBe(false);
+  });
+
+  it('accepts the app: protocol unconditionally', () => {
+    expect(isSelf('app://anything')).toBe(true);
+  });
+
+  it('rejects non-file/app protocols', () => {
+    expect(isSelf('https://jw.org/')).toBe(false);
+  });
+
+  it('rejects an undefined url', () => {
+    expect(isSelf(undefined)).toBe(false);
+  });
+});
+
+describe('isJwDomain', () => {
+  it('accepts jw.org and its subdomains', () => {
+    expect(isJwDomain('https://jw.org/')).toBe(true);
+    expect(isJwDomain('https://www.jw.org/en/')).toBe(true);
+    expect(isJwDomain('https://stream.jw.org/')).toBe(true);
+  });
+
+  it('rejects look-alike domains that merely end with a trusted suffix', () => {
+    expect(isJwDomain('https://evil-jw.org/')).toBe(false);
+    expect(isJwDomain('https://notjw.org/')).toBe(false);
+    expect(isJwDomain('https://xjw.org/')).toBe(false);
+    expect(isJwDomain('https://jw.org.evil.com/')).toBe(false);
+  });
+
+  it('rejects non-https protocols', () => {
+    expect(isJwDomain('http://jw.org/')).toBe(false);
+  });
+});
+
+describe('isTrustedDomain', () => {
+  it('accepts trusted domains and their subdomains', () => {
+    expect(isTrustedDomain('https://jw.org/')).toBe(true);
+    expect(isTrustedDomain('https://cdn.jw-cdn.org/')).toBe(true);
+    expect(isTrustedDomain('https://d1.cloudfront.net/')).toBe(true);
+  });
+
+  it('rejects look-alike domains that merely end with a trusted suffix', () => {
+    expect(isTrustedDomain('https://evil-jw-cdn.org/')).toBe(false);
+    expect(isTrustedDomain('https://notcloudfront.net/')).toBe(false);
+    expect(isTrustedDomain('https://fakeakamaihd.net/')).toBe(false);
+  });
+
+  it('rejects an undefined url', () => {
+    expect(isTrustedDomain(undefined)).toBe(false);
+  });
+});
+
+// SEC-9 (full-audit-2026-09-05.md): akamaihd.net/cloudfront.net are
+// self-service, multi-tenant CDN platforms - fine to trust for loading a
+// media asset (isTrustedDomain, above), but an attacker-provisioned
+// subdomain on either should never be treated as safe to navigate to, open
+// as a webview/new window, or grant a permission request from.
+describe('isTrustedNavigationTarget', () => {
+  it('accepts JW domains and their subdomains', () => {
+    expect(isTrustedNavigationTarget('https://jw.org/')).toBe(true);
+    expect(isTrustedNavigationTarget('https://cdn.jw-cdn.org/')).toBe(true);
+    expect(isTrustedNavigationTarget('https://stream.jw.org/')).toBe(true);
+  });
+
+  it('rejects the multi-tenant CDN hosts isTrustedDomain accepts', () => {
+    expect(isTrustedNavigationTarget('https://d1.cloudfront.net/')).toBe(false);
+    expect(
+      isTrustedNavigationTarget('https://assetsnffrgf-a.akamaihd.net/'),
+    ).toBe(false);
+  });
+
+  it('rejects look-alike domains that merely end with a trusted suffix', () => {
+    expect(isTrustedNavigationTarget('https://evil-jw-cdn.org/')).toBe(false);
+  });
+
+  it('rejects an undefined url', () => {
+    expect(isTrustedNavigationTarget(undefined)).toBe(false);
+  });
+});
+
+describe('isIgnoredUpdateError', () => {
+  it('should return true for ERR_NETWORK_CHANGED', () => {
+    expect(isIgnoredUpdateError('net::ERR_NETWORK_CHANGED')).toBe(true);
+    expect(isIgnoredUpdateError(new Error('net::ERR_NETWORK_CHANGED'))).toBe(
+      true,
+    );
+    expect(
+      isIgnoredUpdateError(
+        new Error('something else'),
+        'Error: net::ERR_NETWORK_CHANGED',
+      ),
+    ).toBe(true);
+  });
+
+  it('should return true for other ignored errors', () => {
+    expect(isIgnoredUpdateError('ECONNRESET')).toBe(true);
+    expect(isIgnoredUpdateError('HttpError: 404')).toBe(true);
+    // MMM-V2-3KS: GitHub's edge served the releases feed as a 500.
+    expect(
+      isIgnoredUpdateError(
+        Object.assign(
+          new Error(
+            '500 \n"method: GET url: https://github.com/sircharlo/meeting-media-manager/releases.atom',
+          ),
+          { name: 'HttpError' },
+        ),
+      ),
+    ).toBe(true);
+    expect(isIgnoredUpdateError('504 Gateway Time-out')).toBe(true);
+    expect(isIgnoredUpdateError('net::ERR_CONNECTION_CLOSED')).toBe(true);
+    expect(isIgnoredUpdateError('net::ERR_NAME_NOT_RESOLVED')).toBe(true);
+    expect(isIgnoredUpdateError('net::ERR_TIMED_OUT')).toBe(true);
+    expect(isIgnoredUpdateError('net::ERR_INTERNET_DISCONNECTED')).toBe(true);
+    expect(isIgnoredUpdateError('net::ERR_NETWORK_IO_SUSPENDED')).toBe(true);
+    expect(isIgnoredUpdateError('net::ERR_PROXY_CONNECTION_FAILED')).toBe(true);
+    expect(isIgnoredUpdateError('net::ERR_TUNNEL_CONNECTION_FAILED')).toBe(
+      true,
+    );
+    expect(isIgnoredUpdateError('net::ERR_HTTP2_PROTOCOL_ERROR')).toBe(true);
+    expect(isIgnoredUpdateError('net::ERR_HTTP2_SERVER_REFUSED_STREAM')).toBe(
+      true,
+    );
+    expect(
+      isIgnoredUpdateError(
+        "Error: ENOENT: no such file or directory, unlink '/home/test/dir/meeting-media-manager-30.1.4-x86_64.AppImage'",
+      ),
+    ).toBe(true);
+    expect(
+      isIgnoredUpdateError(
+        String.raw`Error: ENOENT: no such file or directory, rename 'C:\Users\Test\AppData\Local\meeting-media-manager-updater\pending\temp-meeting-media-manager-26.3.1-ia32.exe' -> 'C:\Users\Test\AppData\Local\meeting-media-manager-updater\pending\meeting-media-manager-26.3.1-ia32.exe'`,
+      ),
+    ).toBe(true);
+  });
+
+  it('should return false for non-ignored errors', () => {
+    expect(isIgnoredUpdateError('Unknown error')).toBe(false);
+    expect(isIgnoredUpdateError(new Error('Fatal exception'))).toBe(false);
+  });
+
+  it('should handle error objects with codes', () => {
+    const error = new Error('Some error');
+    (error as { code?: string }).code = 'ECONNRESET';
+    expect(isIgnoredUpdateError(error)).toBe(true);
+  });
+
+  it('should return true for YAMLException based on error name', () => {
+    // Simulate the actual YAMLException from the Sentry report
+    const error = new Error(
+      'null byte is not allowed in input (1:1)\n\n 1 | \n-----^\n 2 | \n 3 | ',
+    );
+    error.name = 'YAMLException';
+    expect(isIgnoredUpdateError(error)).toBe(true);
+  });
+
+  it('should return true for ERR_ADDRESS_UNREACHABLE', () => {
+    expect(isIgnoredUpdateError('net::ERR_ADDRESS_UNREACHABLE')).toBe(true);
+  });
+});
+
+describe('isIgnoredUnhandledNetworkEvent', () => {
+  it('should ignore unhandled rejections carrying a known network error', () => {
+    expect(
+      isIgnoredUnhandledNetworkEvent({
+        exception: {
+          values: [
+            {
+              mechanism: { handled: false },
+              type: 'Error',
+              value: 'net::ERR_NETWORK_CHANGED',
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('should not ignore handled exceptions with the same message', () => {
+    expect(
+      isIgnoredUnhandledNetworkEvent({
+        exception: {
+          values: [
+            {
+              mechanism: { handled: true },
+              type: 'Error',
+              value: 'net::ERR_NETWORK_CHANGED',
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('should not ignore unhandled rejections with an unrelated message', () => {
+    expect(
+      isIgnoredUnhandledNetworkEvent({
+        exception: {
+          values: [
+            {
+              mechanism: { handled: false },
+              type: 'Error',
+              value: 'Fatal exception',
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('should not ignore events without exception values', () => {
+    expect(isIgnoredUnhandledNetworkEvent({})).toBe(false);
+  });
+});
+
+describe('isUpdaterFullDownloadFallbackError', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should ignore network IO suspended while updater falls back to full download', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+
+    markUpdaterFullDownloadFallback(
+      'Cannot download differentially, fallback to full download: Error: net::ERR_NETWORK_IO_SUSPENDED',
+    );
+
+    expect(
+      isUpdaterFullDownloadFallbackError(
+        new Error('net::ERR_NETWORK_IO_SUSPENDED'),
+      ),
+    ).toBe(true);
+  });
+
+  it('should not ignore unrelated errors during updater full download fallback', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+
+    markUpdaterFullDownloadFallback(
+      'Cannot download differentially, fallback to full download: Error: net::ERR_NETWORK_IO_SUSPENDED',
+    );
+
+    expect(
+      isUpdaterFullDownloadFallbackError(new Error('Fatal exception')),
+    ).toBe(false);
+  });
+
+  it('should handle non-string error fields during updater full download fallback', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+
+    markUpdaterFullDownloadFallback(
+      'Cannot download differentially, fallback to full download: Error: net::ERR_NETWORK_IO_SUSPENDED',
+    );
+
+    expect(
+      isUpdaterFullDownloadFallbackError({
+        code: 500,
+        message: 'net::ERR_NETWORK_IO_SUSPENDED',
+        name: { value: 'Error' },
+      }),
+    ).toBe(false);
+  });
+
+  it('should stop ignoring partial download errors after the fallback window', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+
+    markUpdaterFullDownloadFallback(
+      'Cannot download differentially, fallback to full download: Error: net::ERR_NETWORK_IO_SUSPENDED',
+    );
+
+    vi.setSystemTime(new Date('2026-06-04T12:06:00.000Z'));
+
+    expect(
+      isUpdaterFullDownloadFallbackError('net::ERR_NETWORK_IO_SUSPENDED'),
+    ).toBe(false);
+  });
+});
+
+describe('fetchJsonFromMainProcess', () => {
+  const mockUrl = 'https://example.com/api';
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal('setTimeout', vi.fn());
+    vi.stubGlobal('clearTimeout', vi.fn());
+  });
+
+  it('should return null if url is empty', async () => {
+    const result = await fetchJsonFromMainProcess('');
+    expect(result).toBeNull();
+  });
+
+  it('should return json data on 200 OK', async () => {
+    const mockData = { foo: 'bar' };
+    vi.mocked(fetch).mockResolvedValue({
+      json: () => Promise.resolve(mockData),
+      ok: true,
+      status: 200,
+    } as Response);
+
+    const result = await fetchJsonFromMainProcess(mockUrl);
+    expect(result).toEqual(mockData);
+  });
+
+  it('should return json data on 304 Not Modified', async () => {
+    const mockData = { foo: 'bar' };
+    vi.mocked(fetch).mockResolvedValue({
+      json: () => Promise.resolve(mockData),
+      ok: false,
+      status: 304,
+    } as Response);
+
+    const result = await fetchJsonFromMainProcess(mockUrl);
+    expect(result).toEqual(mockData);
+  });
+
+  it('should return null and not report error for 404', async () => {
+    const spy = vi.spyOn(utils, 'captureElectronError');
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 404,
+    } as Response);
+
+    const result = await fetchJsonFromMainProcess(mockUrl);
+    expect(result).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('should report error for 400 Bad Request if not silent', async () => {
+    const spy = vi.spyOn(utils, 'captureElectronError');
+    vi.mocked(fetch).mockResolvedValue({
+      headers: new Headers(),
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      type: 'basic',
+      url: mockUrl,
+    } as Response);
+
+    await fetchJsonFromMainProcess(mockUrl);
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('should not report error if silent option is true', async () => {
+    const spy = vi.spyOn(utils, 'captureElectronError');
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 500,
+    } as Response);
+
+    await fetchJsonFromMainProcess(mockUrl, undefined, { silent: true });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('should not report wrapped DNS fetch failures', async () => {
+    const spy = vi.spyOn(utils, 'captureElectronError');
+    const cause = Object.assign(new Error('getaddrinfo ENOTFOUND ipinfo.io'), {
+      code: 'ENOTFOUND',
+    });
+    const error = new TypeError('fetch failed', { cause });
+    vi.mocked(fetch).mockRejectedValue(error);
+
+    await fetchJsonFromMainProcess(mockUrl);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('should not report direct DNS errors', async () => {
+    const spy = vi.spyOn(utils, 'captureElectronError');
+    const error = Object.assign(new Error('getaddrinfo ENOTFOUND ipinfo.io'), {
+      code: 'ENOTFOUND',
+    });
+    vi.mocked(fetch).mockRejectedValue(error);
+
+    await fetchJsonFromMainProcess(mockUrl);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

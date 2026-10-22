@@ -1,0 +1,457 @@
+# Guide de l'utilisateur {#user-guide}
+
+Ce guide utilisateur complet vous aidera à maîtriser toutes les fonctionnalités de M³, de la configuration de base aux techniques avancées de présentation de médias.
+
+## Pour commencer {#getting-started}
+
+### Téléchargement et installation {#download-and-install}
+
+Obtenez la dernière version sur la [page de téléchargement](download). Elle recommande la meilleure version pour votre appareil et affiche la dernière version.
+
+### Premier lancement {#first-launch}
+
+Lorsque vous lancez M³ pour la première fois, vous serez guidé à travers un assistant de configuration qui configurera les paramètres essentiels pour votre assemblée locale :
+
+1. **Choisissez votre langue d'interface** - Ceci détermine dans quelle langue les menus et boutons de M³ seront affichés
+2. **Sélectionnez le type de profil** - Choisissez « Régulier » pour un usage normal de l'assemblée locale ou « Autre » pour des événements spéciaux
+3. **Configurez les informations de l'assemblée locale** - Entrez les détails de votre assemblée locale ou utilisez la fonction de recherche automatique
+4. **Configurez l'horaire des réunions** - Configurez vos heures de réunion de semaine et de fin de semaine
+5. **Fonctionnalités optionnelles** - Configurez l'intégration OBS, la musique de fond et d'autres fonctionnalités avancées
+
+:::tip Astuce
+
+Prenez votre temps pendant la configuration - mais vous pourrez toujours modifier ces paramètres plus tard dans le menu Paramètres.
+
+:::
+
+### Aperçu de l'interface principale {#main-interface}
+
+L'interface principale de M³ se compose de plusieurs zones clés :
+
+- **Tiroir de navigation** - Accédez à différentes sections et paramètres
+- **Vue calendrier** - Parcourez les médias par date
+- **Liste des médias** - Affichez et gérez les médias pour les dates sélectionnées
+- **Barre d'outils** - Accès rapide aux fonctions communes
+- **Barre d'état** - Affiche la progression des téléchargements, la musique de fond et le statut de connexion OBS Studio
+
+## Gestion des médias {#user-guide-media-management}
+
+### Comprendre la vue calendrier {#calendar-view}
+
+La vue calendrier affiche votre horaire de réunions et les médias disponibles :
+
+- **Jours de réunion** - Les jours surlignés montrent quand les réunions sont programmées
+- **Indicateurs de médias** - Les icônes montrent quels types de médias sont disponibles
+- **Navigation par date** - Utilisez les touches fléchées pour naviguer entre les mois
+
+### Organiser les médias {#organizing-media}
+
+M³ organise automatiquement les médias par type de réunion et section :
+
+- **Sections de réunion** - Les médias sont regroupés par parties de réunion (Discours public, Joyaux de la Parole de Dieu, etc.)
+- **Sections personnalisées** - Vous pouvez créer des sections personnalisées pour des médias supplémentaires si aucune réunion n'est programmée ce jour-là
+- **Tri manuel** - Faites glisser les éléments multimédias pour les classer dans l'ordre souhaité, et réinitialisez l'ordre si nécessaire
+- **Lecture en boucle** - Lire un élément multimédia en boucle ou répéter tous les éléments d'une section jusqu'à ce que la lecture soit arrêtée manuellement
+
+### Médias cachés et manquants {#hidden-and-missing-media}
+
+Il est possible de masquer les fichiers multimédias dans la liste sans supprimer les fichiers téléchargés automatiquement. Si des fichiers multimédias ont été masqués par erreur, utilisez l'option **Afficher les médias masqués** pour le jour sélectionné.
+
+Si M³ signale des médias manquants, vérifiez d'abord si le contenu devrait devenir disponible à l'approche de la date de la réunion. Vous pouvez également ajouter manuellement l'élément manquant via le menu **Ajouter des médias** ou en le faisant glisser dans la liste des médias.
+
+## Présentation des médias {#media-presentation}
+
+### Ouvrir le lecteur multimédia {#opening-media-player}
+
+Pour présenter des médias lors d'une réunion :
+
+1. Sélectionnez la date et l'élément multimédia que vous souhaitez présenter
+2. Cliquez sur le bouton de lecture ou utilisez le raccourci clavier
+3. La lecture du média commencera sur l'affichage multimédia
+4. Utilisez les contrôles pour lire, mettre en pause ou naviguer dans les médias
+
+### Contrôles du lecteur multimédia {#media-player-controls}
+
+Le lecteur multimédia fournit des contrôles complets :
+
+- **Lecture/Pause** - Démarrer ou mettre en pause la lecture des médias
+- **Arrêt** - Arrêter la lecture
+
+<!-- - **Previous/Next** - Navigate between media items
+- **Volume** - Adjust playback volume -->
+
+<!-- - **Fullscreen** - Toggle fullscreen mode -->
+
+- **Zoom/panoramique** - Maintenez la touche Ctrl ou Maj enfoncée et utilisez la molette de la souris, ou pincez avec deux doigts sur le pavé tactile, pour zoomer, puis faites glisser pour faire un panoramique (pour les images)
+- **Aperçu en direct** - Lorsque cette option est activée, affiche, dans la fenêtre principale, un aperçu de la fenêtre multimédia que voit l'auditoire
+- **Vitesse de lecture** - Lorsque cette option est activée dans les paramètres, vous pouvez régler la vitesse de lecture audio et vidéo à partir du menu contextuel d'un élément multimédia
+
+### Fonctionnalités de présentation avancées {#advanced-presentation}
+
+#### Minutage personnalisé {#custom-timing}
+
+Définissez des temps de début et de fin personnalisés pour les médias :
+
+<!-- 1. Right-click on a media item
+2. Select "Edit Timing" -->
+
+1. Cliquez sur la durée d'une vidéo en haut à gauche de sa miniature
+2. Définissez les temps de début et de fin
+3. Sauvegardez vos modifications
+
+#### Zoom et panoramique {#zoom-pan}
+
+Pour les images et vidéos :
+
+- **Zoom avant/arrière** - Maintenez la touche Ctrl ou Maj enfoncée et utilisez la molette de la souris, pincez avec deux doigts sur le pavé tactile ou utilisez les contrôles de zoom sur la miniature
+- **Panoramique** - Une fois l'image agrandie, cliquez sur la miniature et faites-la glisser pour déplacer l'image (faites glisser le reste de la ligne pour réorganiser l'élément)
+- **Réinitialiser le zoom** - Cliquez pour revenir au zoom original
+
+#### Raccourcis clavier {#user-guide-keyboard-shortcuts}
+
+Configurez des raccourcis clavier personnalisés pour un accès rapide. Notez qu'aucun raccourci clavier n'est défini par défaut.
+
+**Contrôles de médias intégrés** (lorsque la fenêtre principale est au premier plan et affiche la liste des médias) :
+
+- **Tab/Shift+Tab** - Naviguer entre les éléments multimédias
+- **Flèche haut/bas** - Naviguer entre les éléments multimédias
+- **Espace** - Lire/Mettre en pause les médias
+- **Échap** - Arrêter les médias
+
+**Raccourcis personnalisables** (lorsqu'ils sont activés dans les paramètres) :
+
+- **Fenêtre multimédia** : Ouvrir/fermer la fenêtre multimédia
+- **Média précédent/suivant** - Naviguer entre les médias
+- **Pause/Reprendre** : Mettre en pause ou reprendre la lecture des médias
+- **Arrêter les médias** : Arrêter la lecture des médias
+- **Basculer la musique** - Contrôler la musique de fond
+
+**Note (\*) :** Raccourci global - disponible même lorsque l'application n'est pas au premier plan
+
+## Outils d'affichage {#display-tools}
+
+### Fenêtre multimédia {#media-display-window}
+
+La fenêtre multimédia est celle qui est visible pour l'auditoire. Elle peut être affichée sur un écran externe ou utilisée en mode fenêtré, selon votre configuration matérielle.
+
+Utilisez la fenêtre contextuelle d'affichage pour :
+
+- Afficher ou masquer la fenêtre multimédia
+- Choisir l'écran ou le type de fenêtre
+- Sélectionner un arrière-plan temporaire personnalisé au lieu du texte de l'année
+- Utiliser le flux d'une caméra comme arrière-plan. Ceci est principalement utilisé dans les assemblées locales qui tiennent leurs réunions en langue des signes.
+
+Veuillez noter que les arrière-plans personnalisés sont temporaires et ne sont pas enregistrés à la fermeture de M³.
+
+### Minuteur de réunion {#user-guide-meeting-timer}
+
+Lorsque le minuteur de réunion est activé, M³ peut afficher une fenêtre de minuteur séparée pour chronométrer les interventions des participants. Le minuteur peut compter à la hausse ou à la baisse, afficher l'heure actuelle, indiquer le temps restant avant le début d'une réunion prévue et, si nécessaire, signaler les dépassements de temps ou indiquer si la réunion est en avance ou en retard par rapport à l'horaire prévu.
+
+Le minuteur est une fonctionnalité bêta et ne doit être utilisé que s'il est approuvé localement.
+
+#### Parties de la réunion {#user-guide-timer-parts}
+
+La fenêtre contextuelle du minuteur, dans l'îlot d'actions, affiche la liste des parties de la réunion du jour sélectionné. Pour les réunions de semaine, choisissez le nombre de parties des sections « Applique-toi au ministère » et « Vie chrétienne » ; les minutes de chaque section sont réparties également entre ses parties, et chacune d'elles peut ensuite être ajustée librement à l'aide des boutons **+** et **−** ou en cliquant dessus. N'importe quelle partie peut être réglée sur le nombre de minutes de votre choix, y compris 0 pour l'ignorer. Une icône d'avertissement signale les sections dont la durée totale des parties ne correspond pas au temps qui leur est alloué, mais elle ne modifie jamais rien d'elle-même.
+
+Des **parties personnalisées** peuvent être ajoutées n'importe quel jour, pour les rapports du Collège central, les programmes spéciaux ou tout autre élément ne figurant pas dans l'horaire habituel. Les jours sans réunion, le minuteur comporte au départ une partie personnalisée par section de médias personnalisée.
+
+Le nombre de parties, les durées modifiées, les parties personnalisées et les temps enregistrés sont conservés pour chaque journée : ils restent ainsi disponibles après un redémarrage de M³, et les temps d'une réunion ne se mélangent jamais à ceux d'une autre. Les temps enregistrés d'une journée peuvent être effacés en une seule fois à l'aide du bouton **Réinitialiser tous les temps enregistrés pour cette journée**, et un rapport de chronométrage au format PDF peut être exporté à tout moment.
+
+#### Alerte main levée {#user-guide-timer-hand-alert}
+
+Dans la fenêtre contextuelle du minuteur, le bouton **Alerte main levée** fait apparaître une grande main sur l'affichage du minuteur afin d'attirer l'attention du président, par exemple lorsque quelqu'un a levé la main sur Zoom. Avec la [gestion des mains levées du gestionnaire de réunions Zoom](/settings-guide#zoom-meeting-manager-hand-alert), M³ affiche automatiquement cette alerte, accompagnée du nom de la personne, chaque fois que quelqu'un lève la main dans Zoom, et vous permet, en un seul clic pour chaque action, de réactiver son micro, puis de le couper et de baisser sa main.
+
+#### Minuteur sur tablette {#user-guide-timer-remote}
+
+Le [minuteur à distance](/settings-guide#timer-remote), une fonction facultative, diffuse une copie en lecture seule de l'affichage du minuteur sous forme de page web sur votre réseau local. Ouvrez, dans le navigateur d'une tablette ou d'un téléphone placé au pupitre, l'adresse indiquée dans la fenêtre contextuelle du minuteur : l'orateur voit alors le temps restant en toute discrétion, tandis que toutes les commandes restent dans M³.
+
+#### Accès rapide {#user-guide-timer-quick-access}
+
+Lorsque vous survolez le bouton du minuteur dans l'îlot d'actions, la partie en cours de chronométrage s'affiche, avec les boutons Démarrer, Mettre en pause, Arrêter et Partie suivante. Un paramètre permet également d'ancrer, sur le côté droit de la fenêtre principale, un panneau du minuteur toujours visible, qui contient la liste complète des parties et les commandes du minuteur. Consultez le [Guide des paramètres](/settings-guide#timer-quick-access).
+
+## Musique de fond {#user-guide-background-music}
+
+### Configuration de la musique de fond {#background-music-setup}
+
+La musique de fond joue automatiquement avant les réunions et s'arrête au moment approprié :
+
+1. **Activer la musique** - Activez la musique de fond dans les paramètres
+2. **Démarrage automatique** - La musique démarrera automatiquement lorsque M³ se lance, si approprié
+3. **Arrêt de réunion** - La musique s'arrête automatiquement avant l'heure de début de la réunion
+4. **Contrôle manuel** - Utilisez le bouton de musique dans la barre d'état pour démarrer/arrêter manuellement
+5. **Redémarrage** - Reprenez la musique après les réunions d'un clic
+
+## Intégration Zoom {#user-guide-zoom-integration}
+
+M³ peut s'intégrer avec Zoom pour le partage d'écran automatique :
+
+1. **Activer l'intégration** - Activez l'intégration Zoom dans les paramètres
+2. **Configurer le raccourci** - Configurez le raccourci clavier de partage d'écran qui est configuré dans Zoom. Assurez-vous que la case à cocher « global » est cochée dans Zoom.
+3. **Contrôle automatique** - M³ basculera automatiquement le partage d'écran dans Zoom selon les besoins
+4. **Contrôle manuel** - Vous pouvez toujours contrôler manuellement le partage d'écran en utilisant Zoom si nécessaire
+
+## Intégration OBS Studio {#user-guide-obs-integration}
+
+### Configuration de l'intégration OBS Studio {#user-guide-obs-setup}
+
+Pour utiliser M³ avec OBS Studio pour les réunions hybrides :
+
+1. **Installer OBS Studio** - Téléchargez et installez OBS Studio
+2. **Activer WebSocket** - Installez le plugin WebSocket dans OBS
+3. **Configurer M³** - Entrez le port et le mot de passe OBS dans les paramètres de M³
+4. **Configurer les scènes** - Créez des scènes pour la caméra, les médias et autre contenu
+5. **Tester** - Vérifiez que la lecture fonctionne correctement
+
+### Gestion des scènes OBS {#obs-scene-management}
+
+M³ change automatiquement les scènes OBS pendant les présentations :
+
+- **Scène caméra** - Affiche la vue de l'estrade/caméra
+- **Scène média** - Affiche le contenu multimédia
+- **Scène image** - Affiche les images (peut être reportée si activée)
+- **Changement automatique** - Les scènes changent selon le type de média et les paramètres
+- **Commandes d'enregistrement** - Si cette option est activée, M³ peut démarrer et arrêter l'enregistrement dans OBS Studio à partir de la fenêtre contextuelle d'OBS Studio
+
+### Fonctionnalités OBS avancées {#advanced-obs}
+
+#### Ne pas partager automatiquement les images {#user-guide-postpone-images}
+
+Activez cette option pour retarder le partage d'images vers OBS jusqu'à ce qu'il soit déclenché manuellement :
+
+1. Activez « Ne pas partager automatiquement les images » dans les paramètres OBS
+2. Les images ne seront partagées que lorsque vous cliquerez sur le bouton **Afficher l'image pour les participants Zoom** de l'image affichée. Ceci est utile pour montrer les images à l'auditoire en personne en premier.
+
+#### Comportement de changement de scène {#user-guide-scene-switching}
+
+Configurez comment M³ gère les changements de scène :
+
+- **Changer après les médias** - Retourner automatiquement à la scène précédente
+- **Se souvenir de la scène précédente** - Restaurer la scène qui était active avant les médias
+
+### Configuration audio pour les réunions hybrides {#audio-configuration}
+
+Lorsque vous utilisez M³ avec OBS Studio pour des réunions hybrides (en personne + Zoom), vous devez configurer les paramètres audio pour vous assurer que les participants à la réunion peuvent entendre les médias :
+
+#### Paramètres audio Zoom {#zoom-audio-settings}
+
+**Avant chaque réunion, vous devez activer le Son d'origine dans Zoom :**
+
+1. **Ouvrez Zoom** et allez dans Paramètres
+2. **Naviguez vers Audio** → **Avancé**
+3. **Activez « Afficher l'option en réunion pour “Activer le son d'origine” »**
+4. **Cochez « Désactiver l'annulation d'écho »** (première case à cocher)
+5. **Cochez « Désactiver la suppression de bruit »** (deuxième case à cocher)
+6. **Décochez « Désactiver le mode musique haute fidélité »** (troisième case à cocher)
+7. **Avant de commencer chaque réunion**, cliquez sur le bouton « Son d'origine » dans les contrôles de réunion
+
+**Alternative : Partager le son de l'ordinateur**
+Si le Son d'origine ne fonctionne pas bien dans votre configuration :
+
+1. **Avant de lancer la lecture des médias**, allez dans l'onglet **Avancé** dans les options de partage d'écran Zoom
+2. **Cochez « Partager le son de l'ordinateur »**
+3. **Note** : Cette option doit être activée chaque fois que vous démarrez une nouvelle session Zoom
+
+**Meilleure alternative** : Envisagez d'utiliser l'intégration Zoom de M³ au lieu d'OBS Studio, car elle utilise le partage d'écran natif de Zoom qui gère l'audio plus facilement et ne nécessite pas de configuration audio complexe.
+
+#### Pourquoi la configuration audio est nécessaire {#why-audio-config}
+
+M³ lit les médias avec du son sur votre ordinateur, mais cet audio **n'est pas automatiquement transmis** à travers le flux vidéo vers OBS Studio. C'est le même comportement que vous expérimenteriez avec n'importe quel autre lecteur multimédia.
+
+**Le problème audio n'est pas lié à M³** - c'est une limitation de la façon dont le streaming vidéo d'OBS Studio fonctionne avec Zoom. Le flux vidéo agit comme une caméra virtuelle sans son, tout comme une webcam, vous devez donc configurer explicitement Zoom pour capturer l'audio de l'ordinateur. Cela implique que votre ordinateur a deux cartes son, et si ce n'est pas le cas, vous ne pourrez probablement pas utiliser l'intégration OBS Studio avec succès.
+
+**Solution alternative** : Envisagez d'utiliser l'intégration Zoom à la place, car elle utilise le partage d'écran et audio natif de Zoom, qui gère l'audio plus facilement.
+
+#### Résolution des problèmes audio {#audio-troubleshooting}
+
+**Problèmes courants :**
+
+- **Pas d'audio dans Zoom** : Vérifiez si le Son d'origine est activé et correctement configuré
+- **Mauvaise qualité audio** : Vérifiez que les trois cases à cocher Son d'origine sont correctement définies
+- **L'audio ne fonctionne pas après le redémarrage de Zoom** : Les paramètres Son d'origine doivent être réactivés pour chaque nouvelle session Zoom
+
+**Meilleures pratiques :**
+
+- Testez la configuration et le partage audio avant les réunions
+- Créez une liste de contrôle pour la configuration audio
+- Envisagez d'utiliser « Partager le son de l'ordinateur » comme option de secours
+- **Envisagez d'utiliser l'intégration Zoom au lieu d'OBS Studio** pour une gestion audio plus simple
+- Assurez-vous que tous les opérateurs audiovisuels connaissent ces paramètres
+
+## Import et gestion des médias {#media-import}
+
+### Importer des médias personnalisés {#importing-custom-media}
+
+Ajoutez vos propres fichiers multimédias à M³ :
+
+1. **Import de fichiers** - Utilisez le bouton d'import pour ajouter des vidéos, images ou fichiers audio
+2. **Glisser-déposer** - Faites glisser les fichiers directement dans M³
+3. **Dossier partagé** - Ajoutez automatiquement des médias depuis un dossier synchronisé par Dropbox, OneDrive, iCloud Drive ou Google Drive
+4. **Fichiers JWPUB et listes de lecture** - Importez des publications et des listes de lecture
+5. **Médias pour discours publics (S-34 / S-34mp)** - Importez des médias pour discours publics à l'aide de fichiers JWPUB S‑34 ou S‑34mp
+6. **Vidéos du site officiel** - Recherchez des vidéos et ajoutez-les aux médias pour la date sélectionnée
+7. **Médias de l'édition d'étude de la Bible et de la Bible en langue des signes** - Ajoutez des images, des vidéos, des cartes, des références historiques ou les vidéos de la Bible en langue des signes pour les versets sélectionnés
+
+### Gérer les médias importés {#managing-imported-media}
+
+- **Organiser par date** - Assignez les médias importés à des dates spécifiques
+- **Sections personnalisées** - Créez des sections personnalisées pour organiser vos médias
+- **Modifier les propriétés** - Modifiez les titres, les descriptions et le minutage
+- **Supprimer les médias** - Supprimez les éléments multimédias indésirables
+
+### Import de la Bible audio {#audio-bible-import}
+
+Importez des enregistrements audio de versets bibliques :
+
+1. Cliquez sur le bouton « Bible audio »
+2. Sélectionnez le livre et le chapitre de la Bible
+3. Choisir des versets spécifiques ou des plages de versets
+4. Téléchargez les fichiers audio
+5. Utilisez-les
+
+### Import et exportation des paramètres de profil {#profile-settings-import-export}
+
+Les paramètres de chaque profil peuvent être exportés vers un fichier JSON à partir des paramètres. L'importation d'un fichier de paramètres de profil remplace les paramètres du profil actuel, ce qui est utile pour transférer une configuration vers un autre ordinateur ou pour restaurer une configuration connue.
+
+## Dossier partagé et exportation {#user-guide-folder-monitoring}
+
+### Configuration d'un dossier partagé {#folder-monitoring-setup}
+
+Ajoutez des médias depuis un dossier synchronisé par une application de stockage cloud, comme Dropbox, OneDrive, iCloud Drive ou Google Drive :
+
+1. **Activer la fonction** - Répondez « Oui » quand l'assistant de configuration pose la question sur les applications de stockage cloud, ou allez dans **Paramètres** > **Intégrations** > **Dossier partagé** et activez **Ajouter des médias depuis un dossier partagé**
+2. **Choisir le dossier** - Choisissez un dossier dans votre application de stockage cloud, idéalement un nouveau dossier réservé à cet usage
+3. **Dossiers datés** - M³ y crée un dossier pour chaque réunion à venir, nommé d'après la date de la réunion écrite sous la forme année-mois-jour (par exemple, `2026-03-25`)
+4. **Ajouter des fichiers** - Placez des photos, des vidéos, des fichiers audio ou des listes de lecture JW Library dans le dossier d'une réunion, et ils sont ajoutés automatiquement à la liste des médias de cette réunion. Pour un autre jour, créez un dossier nommé de la même façon
+5. **Dossiers passés** - Quand une semaine est terminée, M³ supprime les dossiers de cette semaine et leurs fichiers, pour toutes les personnes qui utilisent le dossier partagé. Désactivez **Supprimer les dossiers des réunions passées** pour les conserver
+
+### Exportation des médias {#user-guide-media-export}
+
+Exportez automatiquement les médias vers des dossiers organisés :
+
+1. **Activer l'exportation automatique** - Activez l'exportation des médias dans les paramètres
+2. **Sélectionner le dossier d'export** - Choisissez où sauvegarder les fichiers exportés
+3. **Organisation automatique** - Les fichiers sont organisés par date et section
+4. **Options de format** - Convertissez les fichiers en MP4 pour une meilleure compatibilité
+
+## Présentation du site web {#website-presentation}
+
+### Présenter le site officiel {#presenting-the-website}
+
+Partagez le site officiel sur des écrans externes :
+
+1. **Ouvrir le mode site web** - Cliquez sur le bouton de présentation du site web
+2. **Affichage externe** - Le site web s'ouvre dans une nouvelle fenêtre
+3. **Navigation** - Utilisez les contrôles du navigateur pour naviguer
+
+### Contrôles du site web {#website-controls}
+
+- **Ouvrir le site web** - Ouvrir une nouvelle fenêtre pour le site web
+- **Démarrer le partage** - Afficher la fenêtre du site web dans la fenêtre multimédia pour l'auditoire
+- **Arrêter le partage** - Cesser d'afficher le site web et revenir à l'affichage du texte de l'année ou de l'arrière-plan de la fenêtre multimédia
+- **Navigation** - Contrôles de navigation standard du navigateur
+- **Actualiser** - Recharger la page actuelle
+- **Fermer** - Quitter le mode de présentation du site web
+- **Retour automatique** - Retour automatique à la liste des médias après l'arrêt de la diffusion du site web (en option)
+
+## Enregistrement des réunions {#meeting-recordings}
+
+M³ permet de gérer l'enregistrement des réunions, mais ne dispose pas d'un enregistreur intégré.
+
+- **Enregistrement OBS Studio** - Si les commandes d'enregistrement OBS Studio sont activées, utilisez la fenêtre contextuelle OBS Studio pour démarrer et arrêter l'enregistrement dans OBS Studio
+- **Application d'enregistrement externe** - Configurez des raccourcis clavier pour une application d'enregistrement distincte, puis utilisez la fenêtre contextuelle des enregistrements de réunion pour envoyer ces raccourcis
+- **Dossier d'enregistrements** - Configurez un dossier d'enregistrements, ce qui affichera un bouton rapide permettant d'ouvrir le dossier dans lequel les enregistrements sont sauvegardés
+
+## Fonctionnalités avancées {#user-guide-advanced-features}
+
+### Assemblées locales multiples {#user-guide-multiple-congregations}
+
+Gérez plusieurs assemblées locales ou groupes :
+
+1. **Créer des profils** - Configurez des profils séparés pour différentes assemblées locales
+2. **Changer de profil** - Utilisez le sélecteur d'assemblée locale pour basculer entre les profils
+3. **Paramètres séparés** - Chaque profil a ses propres paramètres et médias
+4. **Ressources partagées** - Les fichiers multimédias sont partagés entre les profils dans la mesure du possible
+
+### Raccourcis clavier {#keyboard-shortcuts-guide}
+
+Configurez des raccourcis clavier personnalisés pour une utilisation efficace :
+
+1. **Activer les raccourcis** - Activez les raccourcis clavier dans les paramètres
+2. **Configurer les raccourcis** - Configurez des raccourcis pour les actions courantes
+3. **Pratiquer** - Apprenez vos raccourcis pour une utilisation plus rapide
+4. **Personnaliser** - Ajustez les raccourcis selon vos préférences
+
+## Résolution des problèmes {#troubleshooting-guide}
+
+### Problèmes courants {#common-issues}
+
+#### Les médias ne se téléchargent pas {#user-guide-media-not-downloading}
+
+- Vérifiez vos paramètres d'horaire de réunions
+- Vérifiez votre connexion Internet
+- Vérifiez si les médias sont disponibles dans votre langue sélectionnée
+
+#### L'intégration OBS Studio ne fonctionne pas {#user-guide-obs-not-working}
+
+- Vérifiez que le plugin OBS WebSocket est installé
+- Vérifiez les paramètres de port et de mot de passe
+- Assurez-vous qu'OBS est en cours d'exécution
+
+#### Problèmes audio dans Zoom/OBS {#audio-issues}
+
+- **Pas d'audio dans Zoom** : Activez le Son d'origine dans les paramètres Zoom et avant chaque réunion
+- **Mauvaise qualité audio** : Vérifiez les trois cases à cocher Son d'origine (deux premières activées, troisième désactivée)
+- **L'audio ne fonctionne pas après redémarrage** : Le Son d'origine doit être réactivé pour chaque nouvelle session Zoom
+- **Solution alternative** : Utilisez l'option « Partager le son de l'ordinateur » dans le partage d'écran Zoom
+
+#### Problèmes de performance {#user-guide-performance-issues}
+
+- Mettez en cache les vidéos des cantiques
+- Réduisez la résolution maximale
+- Effacez les anciens fichiers mis en cache
+- Vérifiez l'espace disque disponible
+- Si l'application présente des anomalies graphiques ou plante, essayez de désactiver l'accélération matérielle et redémarrez M³
+
+#### Problèmes de langue {#user-guide-language-issues}
+
+- Vérifiez le paramètre de langue des médias
+- Assurez-vous que la langue est disponible sur JW.org
+- Essayez une langue secondaire
+- Vérifiez le paramètre de langue de l'interface
+
+### Obtenir de l'aide {#getting-help}
+
+Si vous rencontrez des problèmes :
+
+1. **Vérifiez la documentation** - Consultez ce guide et toute autre documentation disponible
+2. **Recherchez les problèmes** - Cherchez des problèmes similaires sur GitHub
+3. **Signalez les problèmes** - Créez un nouveau problème avec des informations détaillées
+
+## Meilleures pratiques {#best-practices}
+
+### Avant les réunions {#before-meetings}
+
+1. **Vérifiez les téléchargements** - Assurez-vous que tous les médias sont téléchargés
+2. **Testez l'équipement** - Vérifiez que les écrans et l'audio fonctionnent
+3. **Préparez les médias** - Examinez et organisez les médias pour la réunion ; assurez-vous qu'aucun fichier multimédia ne manque
+4. **Configurez l'audio** - Pour les réunions hybrides, activez le Son d'origine dans Zoom ou configurez « Partager le son de l'ordinateur »
+
+### Pendant les réunions {#during-meetings}
+
+1. **Restez concentré** - Utilisez l'interface épurée et sans distraction
+2. **Utilisez les raccourcis** - Maîtrisez les raccourcis clavier pour une utilisation fluide
+3. **Surveillez l'audio** - Gardez un œil sur les niveaux de volume, si cela fait partie de vos responsabilités
+4. **Soyez préparé** - Ayez le prochain élément multimédia prêt
+5. **Vérifiez l'audio** - Pour les réunions hybrides, assurez-vous que les participants Zoom peuvent entendre les médias
+
+### Après les réunions {#after-meetings}
+
+1. **Démarrer la musique de fond** - Démarrez la lecture de la musique de fond
+2. **Planifier à l'avance** - Préparez la prochaine réunion en vous assurant que tout est en place
+3. **Nettoyer** - Fermez le lecteur multimédia quand vous êtes prêt à partir
+
+### Maintenance régulière {#regular-maintenance}
+
+1. **Mettre à jour M³** - Gardez l'application à jour
+2. **Vider le cache** - Effacez périodiquement les anciens fichiers mis en cache
+3. **Vérifier les paramètres** - Examinez et mettez à jour les paramètres selon les besoins

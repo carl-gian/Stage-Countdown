@@ -1,0 +1,381 @@
+<template>
+  <BaseDialog v-model="dialogValue" :dialog-id="dialogId" persistent>
+    <div
+      class="bg-secondary-contrast large-overlay q-px-none flex"
+      style="flex-flow: column"
+    >
+      <div
+        class="row q-px-md q-pt-lg text-bigger text-semibold text-primary items-center"
+      >
+        <div class="icon-chip q-mr-sm">
+          <q-icon name="mmm-jwpub" size="xs" />
+        </div>
+        <div class="col">
+          {{ publicationTitle || t('select-media-items') }}
+        </div>
+      </div>
+      <div class="row q-px-md q-py-md column">
+        <div v-if="document?.Title" class="text-body1">
+          {{ document.Title }}
+        </div>
+        <div class="text-body2 text-secondary">
+          {{ t('select-media-items-explain') }}
+        </div>
+      </div>
+
+      <div
+        class="q-pr-scroll overflow-auto col items-start q-pt-sm"
+        :class="{ 'content-center': loading }"
+      >
+        <div
+          v-if="loading && !mediaItems.length"
+          class="col q-px-md full-width"
+        >
+          <div class="text-secondary text-uppercase q-my-sm">
+            {{ t('select-media-items') }}
+          </div>
+          <div class="col full-width">
+            <q-list class="full-width" separator>
+              <q-item v-for="skeletonIndex in 4" :key="skeletonIndex">
+                <q-item-section avatar>
+                  <q-skeleton size="24px" type="QCheckbox" />
+                </q-item-section>
+                <q-item-section avatar>
+                  <q-skeleton height="54px" type="rect" width="96px" />
+                </q-item-section>
+                <q-item-section>
+                  <q-skeleton height="16px" type="text" width="80%" />
+                  <q-skeleton
+                    class="q-mt-xs"
+                    height="14px"
+                    type="text"
+                    width="60%"
+                  />
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </div>
+        </div>
+        <template v-else>
+          <div v-if="mediaItems.length" class="col q-px-md full-width">
+            <div class="text-secondary text-uppercase q-my-sm">
+              {{ t('select-media-items') }}
+            </div>
+            <div class="col full-width">
+              <q-list class="full-width" separator>
+                <q-item
+                  v-for="(item, index) in mediaItems"
+                  :key="item.MultimediaId"
+                  clickable
+                  @click="toggleItem(index)"
+                >
+                  <q-item-section avatar>
+                    <q-checkbox
+                      :model-value="selectedItems.includes(index)"
+                      @update:model-value="toggleItem(index)"
+                    />
+                  </q-item-section>
+                  <q-item-section avatar>
+                    <q-img
+                      v-if="item.ResolvedPreviewPath"
+                      :alt="getMediaAlt(item)"
+                      class="thumbnail-frame"
+                      fit="contain"
+                      height="54px"
+                      :src="pathToFileURL(item.ResolvedPreviewPath)"
+                      width="96px"
+                    />
+                    <q-icon
+                      v-else
+                      class="thumbnail-frame"
+                      color="primary"
+                      :name="getMediaIcon(item)"
+                      size="md"
+                    />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>{{ getMediaLabel(item) }}</q-item-label>
+                    <q-item-label v-if="getMediaCaption(item)" caption>
+                      {{ getMediaCaption(item) }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
+              </q-list>
+            </div>
+          </div>
+          <div v-else-if="!loading" class="row q-px-md col flex-center">
+            <div class="text-center">
+              <q-icon color="secondary" name="mmm-local-media" size="xl" />
+              <div class="text-secondary q-mt-md">
+                {{ t('no-media-items-found') }}
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="row q-px-md q-py-md">
+        <div class="col">
+          <q-btn
+            v-if="selectedItems.length < mediaItems.length"
+            color="primary"
+            flat
+            :label="t('select-all')"
+            @click="selectAll"
+          />
+          <q-btn
+            v-else-if="
+              selectedItems.length === mediaItems.length &&
+              mediaItems.length > 0
+            "
+            color="primary"
+            flat
+            :label="t('deselect-all')"
+            @click="deselectAll"
+          />
+        </div>
+        <div class="col-shrink q-gutter-x-sm">
+          <q-btn flat :label="t('cancel')" @click="handleCancel" />
+          <q-btn
+            v-if="selectedItems.length"
+            color="primary"
+            :label="t('add-count', { count: selectedItems.length })"
+            @click="addSelectedItems"
+          />
+        </div>
+      </div>
+    </div>
+  </BaseDialog>
+</template>
+
+<script setup lang="ts">
+import type {
+  DocumentItem,
+  MediaSectionIdentifier,
+  MultimediaItem,
+} from 'src/types';
+
+import BaseDialog from 'components/dialog/BaseDialog.vue';
+import { errorCatcher } from 'src/helpers/error-catcher';
+import {
+  addJwpubDocumentMediaToFiles,
+  getJwLangCode,
+  resolveMultimediaPreviewPath,
+} from 'src/helpers/jw-media';
+import { withPendingSectionImport } from 'src/helpers/pending-section-imports';
+import { log } from 'src/shared/vanilla';
+import {
+  addFullFilePathToMultimediaItem,
+  getDocumentMultimediaItems,
+  getPublicationInfoFromDb,
+} from 'src/utils/sqlite';
+import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
+const { basename, pathToFileURL } = globalThis.electronApi;
+const props = defineProps<{
+  dbPath: string;
+  dialogId: string;
+  document: DocumentItem | undefined;
+  modelValue: boolean;
+  publicationTitle?: string;
+  section: MediaSectionIdentifier | undefined;
+}>();
+
+// Emits
+const emit = defineEmits<{
+  cancel: [];
+  ok: [];
+  'update:modelValue': [value: boolean];
+}>();
+
+const dialogValue = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value),
+});
+
+const loading = ref<boolean>(false);
+const mediaItems = ref<(MultimediaItem & { ResolvedPreviewPath?: string })[]>(
+  [],
+);
+const selectedItems = ref<number[]>([]);
+
+const loadMediaItems = async () => {
+  try {
+    loading.value = true;
+    if (!props.dbPath || !props.document) return;
+
+    const items = await getDocumentMultimediaItems(
+      {
+        db: props.dbPath,
+        docId: props.document.DocumentId,
+      },
+      false, // includePrinted
+    );
+
+    // Get publication info to resolve full file paths
+    const publication = await getPublicationInfoFromDb(props.dbPath);
+
+    // Resolve full file paths for all multimedia items
+    const resolvedItems = await Promise.all(
+      items.map(async (item) => {
+        const fullPathItem = await addFullFilePathToMultimediaItem(
+          item,
+          publication,
+        );
+        const resolvedPreviewPath =
+          await resolveMultimediaPreviewPath(fullPathItem);
+        return {
+          ...fullPathItem,
+          ResolvedPreviewPath: resolvedPreviewPath,
+        };
+      }),
+    );
+
+    mediaItems.value = resolvedItems;
+  } catch (error) {
+    errorCatcher(error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const toggleItem = (index: number) => {
+  const currentIndex = selectedItems.value.indexOf(index);
+  if (currentIndex === -1) {
+    selectedItems.value.push(index);
+  } else {
+    selectedItems.value.splice(currentIndex, 1);
+  }
+  selectedItems.value.sort((a, b) => a - b);
+};
+
+const selectAll = () => {
+  selectedItems.value = mediaItems.value.map((_, index) => index);
+};
+
+const deselectAll = () => {
+  selectedItems.value = [];
+};
+
+const getMediaIcon = (item: MultimediaItem) => {
+  if (item.MimeType?.startsWith('video/')) return 'mmm-movie';
+  if (item.MimeType?.startsWith('audio/')) return 'mmm-audio';
+  return 'mmm-local-media';
+};
+
+const isImageItem = (item: MultimediaItem) =>
+  item.MimeType?.startsWith('image/');
+
+const getCleanText = (value: null | string | undefined) => value?.trim() ?? '';
+
+const getFileBasename = (item: MultimediaItem) =>
+  item.FilePath ? basename(item.FilePath) : '';
+
+const getMediaIdentifier = (item: MultimediaItem) =>
+  [
+    item.KeySymbol,
+    item.IssueTagNumber,
+    item.MepsDocumentId,
+    getJwLangCode(item.MepsLanguageIndex) ?? '',
+    item.Track,
+  ]
+    .filter((x) => !!x)
+    .join('_');
+
+const getMediaTitle = (item: MultimediaItem) => {
+  const title = getCleanText(item.Title);
+  if (title && title !== getCleanText(props.document?.Title)) return title;
+
+  return '';
+};
+
+const getMediaLabel = (item: MultimediaItem) =>
+  getMediaTitle(item) ||
+  getMediaIdentifier(item) ||
+  getFileBasename(item) ||
+  getCleanText(item.Label) ||
+  item.MultimediaId.toString();
+
+const getMediaCaption = (item: MultimediaItem) => {
+  const label = getMediaLabel(item);
+  const captionCandidates = isImageItem(item)
+    ? [getMediaIdentifier(item), getFileBasename(item)]
+    : [getFileBasename(item), getMediaIdentifier(item)];
+
+  return (
+    captionCandidates.find((caption) => caption && caption !== label) ?? ''
+  );
+};
+
+const getMediaAlt = (item: MultimediaItem) => {
+  return getMediaLabel(item);
+};
+
+const addSelectedItems = () => {
+  const { dbPath, document } = props;
+  if (!dbPath || !document || !selectedItems.value.length) return;
+
+  const selectedMultimediaIds = selectedItems.value
+    .map((index) => mediaItems.value[index]?.MultimediaId)
+    .filter((id): id is number => id !== undefined);
+
+  log('🎯 Selected multimedia IDs:', 'jwpub', 'log', selectedMultimediaIds);
+
+  // Fire-and-forget: addJwpubDocumentMediaToFiles already catches and
+  // swallows its own errors, so awaiting it here bought the user nothing
+  // but a spinner. Closing the dialog immediately and letting the
+  // section's skeleton placeholder (from withPendingSectionImport) cover
+  // the wait matches every other "add media" dialog's behavior.
+  void withPendingSectionImport(
+    props.section ?? 'imported-media',
+    selectedMultimediaIds.length,
+    () =>
+      addJwpubDocumentMediaToFiles(
+        dbPath,
+        document,
+        props.section,
+        undefined, // pubFolder
+        undefined, // meetingDate
+        selectedMultimediaIds,
+      ),
+  );
+
+  dialogValue.value = false;
+  emit('ok');
+};
+
+const handleCancel = () => {
+  selectedItems.value = [];
+  mediaItems.value = [];
+  dialogValue.value = false;
+  emit('cancel');
+};
+
+// Watch for dialog opening to load media items
+watch(
+  () => dialogValue.value,
+  (isOpen) => {
+    if (isOpen) {
+      void loadMediaItems();
+    } else {
+      selectedItems.value = [];
+      mediaItems.value = [];
+    }
+  },
+);
+</script>
+
+<style scoped>
+.thumbnail-frame {
+  align-items: center;
+  background: rgba(128, 128, 128, 0.12);
+  border-radius: 4px;
+  display: flex;
+  height: 54px;
+  justify-content: center;
+  width: 96px;
+}
+</style>

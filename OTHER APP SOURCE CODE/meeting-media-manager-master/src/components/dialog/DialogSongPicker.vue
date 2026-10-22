@@ -1,0 +1,292 @@
+<template>
+  <BaseDialog v-model="dialogValue" :dialog-id="dialogId">
+    <div
+      class="bg-secondary-contrast flex medium-overlay q-px-none"
+      style="flex-flow: column"
+    >
+      <div
+        class="text-bigger text-semibold text-primary row q-px-md q-pt-lg items-center"
+      >
+        <div class="icon-chip q-mr-sm">
+          <q-icon name="mmm-music-note" size="xs" />
+        </div>
+        <div class="col">
+          {{ t('choose-a-song') }}
+        </div>
+        <div class="col-shrink">
+          <q-btn
+            :aria-label="t('click-to-refresh-list')"
+            color="primary"
+            flat
+            icon="mmm-cloud-done"
+            :loading="loading"
+            round
+            size="sm"
+            @click="startSongUpdate()"
+          >
+            <q-tooltip :delay="500">
+              <div>{{ t('click-to-refresh-list') }}</div>
+              <div v-if="songsUpdated">
+                {{ t('list-last-updated', { date: songsUpdated }) }}
+              </div>
+            </q-tooltip>
+          </q-btn>
+        </div>
+      </div>
+      <div class="row q-px-md q-pt-md">
+        {{ t('add-a-song') }}
+      </div>
+      <DialogDownloadProgress :label="t('loading')" :loading="loading" />
+      <div class="row q-px-md q-py-md">
+        <q-input
+          v-model="filter"
+          autofocus
+          class="col"
+          clearable
+          debounce="100"
+          dense
+          :disable="loading"
+          :label="t('search-by-title-or-number')"
+          outlined
+          spellcheck="false"
+        >
+          <template #prepend>
+            <q-icon name="mmm-search" />
+          </template>
+        </q-input>
+      </div>
+      <q-slide-transition>
+        <div
+          v-if="loading && filteredSongs?.length === 0"
+          class="q-px-md q-pb-md row q-col-gutter-xs"
+        >
+          <div v-for="songIndex in 50" :key="songIndex" class="col col-grid">
+            <q-skeleton
+              class="rounded-borders-sm aspect-ratio-1 full-width"
+              type="QBtn"
+            />
+          </div>
+        </div>
+      </q-slide-transition>
+      <div class="q-px-md overflow-auto row q-col-gutter-xs content-start">
+        <div
+          v-for="song in filteredSongs"
+          :key="song.track"
+          class="col col-grid"
+        >
+          <q-btn
+            class="rounded-borders-sm aspect-ratio-1 full-width"
+            :class="{
+              'bg-primary': hoveredSong === song.track,
+              'text-white': hoveredSong === song.track,
+              'bg-primary-light': hoveredSong !== song.track,
+            }"
+            :disable="isProcessing"
+            :label="song.track"
+            :loading="isProcessing && hoveredSong === song.track"
+            unelevated
+            @click="addSong(song.track)"
+            @mouseout="if (!loading) hoveredSong = null;"
+            @mouseover="if (!loading) hoveredSong = song.track;"
+          >
+            <q-tooltip v-if="!loading">
+              {{ song.title }}
+            </q-tooltip>
+          </q-btn>
+        </div>
+      </div>
+      <div class="row q-px-md q-py-md row">
+        <div class="col text-right">
+          <q-btn flat :label="t('cancel')" @click="dismissPopup" />
+        </div>
+      </div>
+    </div>
+  </BaseDialog>
+</template>
+
+<script setup lang="ts">
+import type {
+  MediaItemsMediatorFile,
+  MediaLink,
+  MediaSectionIdentifier,
+  PublicationFetcher,
+} from 'src/types';
+
+import { watchOnce } from '@vueuse/core';
+import BaseDialog from 'components/dialog/BaseDialog.vue';
+import DialogDownloadProgress from 'components/dialog/DialogDownloadProgress.vue';
+import { storeToRefs } from 'pinia';
+import { errorCatcher } from 'src/helpers/error-catcher';
+import { getJwMediaInfo, getPubMediaLinks } from 'src/helpers/jw-media';
+import { useCurrentStateStore } from 'stores/current-state';
+import { useJwStore } from 'stores/jw';
+import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
+const props = defineProps<{
+  dialogId: string;
+  modelValue: boolean;
+  section: MediaSectionIdentifier | undefined;
+}>();
+
+const emit = defineEmits<{
+  cancel: [];
+  import: [
+    data: {
+      files: MediaItemsMediatorFile[] | MediaLink[];
+      songTrack: number;
+      thumbnail?: string;
+      title: string;
+    },
+  ];
+  ok: [];
+  'update:modelValue': [value: boolean];
+}>();
+
+const dialogValue = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value),
+});
+
+// Setup logic
+const currentState = useCurrentStateStore();
+const { currentSettings, currentSongbook, currentSongs, online } =
+  storeToRefs(currentState);
+
+const jwStore = useJwStore();
+const { updateJwSongs } = jwStore;
+
+const loading = ref(false);
+const isProcessing = ref(false);
+const hoveredSong = ref<null | number>(null);
+
+const filter = ref('');
+
+const resetDialogState = () => {
+  // Reset all dialog state
+  filter.value = '';
+  hoveredSong.value = null;
+  loading.value = false;
+  isProcessing.value = false;
+};
+
+const songsUpdated = computed(() => {
+  const lang = currentSettings.value?.lang;
+  const updated = lang ? jwStore.jwSongs[lang]?.updated : null;
+  if (!updated || new Date(updated).getTime() === 0) return undefined;
+  return new Date(updated).toLocaleString();
+});
+
+const filteredSongs = computed((): MediaLink[] => {
+  if (filter.value) {
+    const searchTerms = filter.value.toLowerCase().split(/\s+/).filter(Boolean);
+    return currentSongs.value?.filter((s) =>
+      searchTerms.every((term) => s.title.toLowerCase().includes(term)),
+    );
+  }
+  return currentSongs.value;
+});
+
+const dismissPopup = () => {
+  // Reset state when dialog is cancelled
+  resetDialogState();
+  dialogValue.value = false;
+  emit('cancel');
+};
+
+const addSong = async (songTrack: number) => {
+  try {
+    isProcessing.value = true;
+    hoveredSong.value = songTrack;
+    if (songTrack) {
+      const songTrackItem: PublicationFetcher = {
+        fileformat: 'MP4',
+        langwritten: currentSettings.value?.lang || 'E', // NOSONAR: '' means not set
+        pub: currentSongbook.value?.pub,
+        track: songTrack,
+      };
+      const [songTrackFiles, { thumbnail, title }] = await Promise.all([
+        getPubMediaLinks(songTrackItem),
+        getJwMediaInfo(songTrackItem),
+      ]);
+
+      let files =
+        songTrackFiles?.files?.[currentSettings.value?.lang || 'E']?.['MP4'] || // NOSONAR: '' means not set
+        [];
+      let resolvedTitle = title;
+
+      // The live fetch can fail/return nothing on a flaky connection even
+      // though this exact song was already downloaded in a previous
+      // session - currentSongs is the same persisted list that populated
+      // this picker's buttons, so a match here is a real local file
+      // candidate (downloadFileIfNeeded short-circuits to it once
+      // filesize matches, no network needed).
+      if (!files.length) {
+        const cachedSong = currentSongs.value?.find(
+          (s) => s.track === songTrack,
+        );
+        if (cachedSong) {
+          files = [cachedSong];
+          resolvedTitle ||= cachedSong.title;
+        }
+      }
+
+      // ✅ Always emit - parent handles section assignment
+      emit('import', {
+        files,
+        songTrack,
+        thumbnail,
+        title: resolvedTitle.replace(/^\d+\.\s*/, ''),
+      });
+      resetDialogState();
+      dialogValue.value = false;
+      emit('ok');
+    }
+  } catch (error) {
+    errorCatcher(error);
+  } finally {
+    // Reset state and close dialog after song is added
+    resetDialogState();
+    dialogValue.value = false;
+    emit('ok');
+  }
+};
+
+const startSongUpdate = async () => {
+  const maxRes = currentSettings.value?.maxRes;
+  const lang = currentSettings.value?.lang;
+  const songbook = currentSongbook.value;
+  if (!maxRes || !lang || !songbook || !online.value) return;
+  loading.value = true;
+  await updateJwSongs({
+    currentSongbook: songbook,
+    force: true,
+    lang,
+    maxRes,
+    online: online.value,
+  });
+  loading.value = false;
+};
+
+// Initialize
+watchOnce(
+  () => online.value && currentSettings.value && currentSongbook.value,
+  () => {
+    void startSongUpdate();
+  },
+  { immediate: true },
+);
+
+// Watch for dialog closing to reset state
+watch(
+  () => dialogValue.value,
+  (isOpen) => {
+    if (!isOpen) {
+      // Reset state when dialog closes
+      resetDialogState();
+    }
+  },
+);
+</script>

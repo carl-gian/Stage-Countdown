@@ -1,0 +1,193 @@
+import type { JwLangCode } from 'src/types/jw/lang.d.ts';
+
+// ! This file will be updated by the update-langs script.
+
+export type LanguageValue =
+  | 'bzs'
+  | 'cmnHans'
+  | 'cmnHant'
+  | 'de'
+  | 'en'
+  | 'es'
+  | 'et'
+  | 'fr'
+  | 'hu'
+  | 'it'
+  | 'ko'
+  | 'nl'
+  | 'pt'
+  | 'ru'
+  | 'sl'
+  | 'ty'
+  | 'uk'
+  | 'zh';
+
+// As a sort of rule, let's only enable a language once it's reached a threshold of 50% translated in Crowdin.
+// Modify this file along with src/i18n/index.ts to enable a language both on the docs website and in the app.
+
+export const enabled: LanguageValue[] = [
+  'cmnHans',
+  'de',
+  'en',
+  'es',
+  'et',
+  'fr',
+  'hu',
+  'it',
+  'ko',
+  'nl',
+  'pt',
+  'ru',
+  'sl',
+  'ty',
+  'uk',
+];
+
+// This is the list of all languages that are configured in Crowdin.
+
+export const locales: {
+  englishName: string;
+  label: string;
+  langcode: JwLangCode;
+  signLangCodes?: JwLangCode[];
+  value: LanguageValue;
+}[] = [
+  {
+    englishName: 'Chinese Mandarin (Simplified)',
+    label: '中文简体（普通话）',
+    langcode: 'CHS',
+    value: 'cmnHans',
+  },
+  {
+    englishName: 'German',
+    label: 'Deutsch',
+    langcode: 'X',
+    signLangCodes: ['DGS', 'SGS', 'OGS'],
+    value: 'de',
+  },
+  {
+    englishName: 'English',
+    label: 'English',
+    langcode: 'E',
+    signLangCodes: [
+      'ASL',
+      'INS',
+      'BSL',
+      'AUS',
+      'JML',
+      'KSI',
+      'ISG',
+      'ZSL',
+      'SGL',
+      'NZS',
+      'FSL',
+      'SAS',
+      'ZAS',
+      'GHS',
+      'SLN',
+      'USL',
+      'NNS',
+      'SWS',
+      'WSL',
+    ],
+    value: 'en',
+  },
+  {
+    englishName: 'Spanish',
+    label: 'español',
+    langcode: 'S',
+    signLangCodes: [
+      'LSE',
+      'LSA',
+      'SCH',
+      'LSC',
+      'SEC',
+      'LSU',
+      'LSS',
+      'CBS',
+      'LSG',
+      'BVL',
+      'LSM',
+      'LSP',
+      'SPE',
+      'LSV',
+      'SHO',
+      'LSN',
+      'PSL',
+      'SCR',
+    ],
+    value: 'es',
+  },
+  {
+    englishName: 'Estonian',
+    label: 'eesti',
+    langcode: 'ST',
+    signLangCodes: ['STD'],
+    value: 'et',
+  },
+  {
+    englishName: 'French',
+    label: 'Français',
+    langcode: 'F',
+    signLangCodes: ['LSF', 'LSQ', 'SBF', 'CGS', 'LSI', 'BRS'],
+    value: 'fr',
+  },
+  {
+    englishName: 'Hungarian',
+    label: 'magyar',
+    langcode: 'H',
+    value: 'hu',
+  },
+  {
+    englishName: 'Italian',
+    label: 'Italiano',
+    langcode: 'I',
+    value: 'it',
+  },
+  {
+    englishName: 'Korean',
+    label: '한국어',
+    langcode: 'KO',
+    value: 'ko',
+  },
+  {
+    englishName: 'Dutch',
+    label: 'Nederlands',
+    langcode: 'O',
+    signLangCodes: ['NGT', 'SSU', 'VGT'],
+    value: 'nl',
+  },
+  {
+    englishName: 'Portuguese (Brazil)',
+    label: 'Português (Brasil)',
+    langcode: 'T',
+    signLangCodes: ['LSB', 'LGP', 'LAS', 'SLM'],
+    value: 'pt',
+  },
+  {
+    englishName: 'Russian',
+    label: 'русский',
+    langcode: 'U',
+    signLangCodes: ['RSL'],
+    value: 'ru',
+  },
+  {
+    englishName: 'Slovenian',
+    label: 'slovenščina',
+    langcode: 'SV',
+    signLangCodes: ['SZJ'],
+    value: 'sl',
+  },
+  {
+    englishName: 'Tahitian',
+    label: 'Tahiti',
+    langcode: 'TH',
+    value: 'ty',
+  },
+  {
+    englishName: 'Ukrainian',
+    label: 'українська',
+    langcode: 'K',
+    value: 'uk',
+  },
+];

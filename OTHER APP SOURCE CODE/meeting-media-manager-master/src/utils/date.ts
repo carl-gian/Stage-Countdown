@@ -1,0 +1,592 @@
+import type { DateLocale, DateOptions, DateUnitOptions } from 'quasar';
+
+import { errorCatcher } from 'src/helpers/error-catcher';
+import { log } from 'src/shared/vanilla';
+import { capitalize, pad } from 'src/utils/general';
+
+type PotentialDate = Date | number | string;
+
+/**
+ * Helper to parse an object (Date, date-like, or generic object) to a Date.
+ * @internal
+ */
+const parseObjectToDate = (input: object): Date => {
+  // If it's already a Date object
+  if (input instanceof Date) {
+    return new Date(input);
+  }
+
+  // If it's a date-like object (has getTime method)
+  if (typeof (input as { getTime?: unknown }).getTime === 'function') {
+    const time = (input as { getTime: () => number }).getTime();
+    const date = new Date(time);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+
+  // Generic object conversion
+  if (Object.keys(input).length === 0) {
+    throw new Error('Cannot convert empty object to date');
+  }
+
+  const date = new Date(input as unknown as Date);
+  if (Number.isNaN(date.getTime())) {
+    throw new TypeError(
+      `Cannot convert object to date: ${typeof input} with keys: ${Object.keys(input).join(', ')}`,
+    );
+  }
+
+  return date;
+};
+
+/**
+ * Helper to parse a string to a Date, handling specific formats for local timezone.
+ * @internal
+ */
+const parseStringToDate = (input: string): Date => {
+  // Convert yyyymmdd to local date
+  if (/^\d{8}$/.test(input)) {
+    const year = Number.parseInt(input.slice(0, 4));
+    const month = Number.parseInt(input.slice(4, 6)) - 1;
+    const day = Number.parseInt(input.slice(6, 8));
+    return new Date(year, month, day);
+  }
+
+  // Handle ISO-like date string (YYYY-MM-DD) to local timezone
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    const [year, month, day] = input.split('-').map(Number);
+    if (year && month && day) {
+      return new Date(year, month - 1, day);
+    }
+  }
+
+  // Fallback to standard constructor
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) {
+    throw new TypeError(`Unsupported date string format: ${input}`);
+  }
+
+  return date;
+};
+
+/**
+ * Creates a new date object from a date string or object.
+ * @param lookupDate The input to create the date object from.
+ * @returns The date object at midnight local time.
+ * @example
+ * dateFromString('20210230')
+ * dateFromString('2021-02-30')
+ * dateFromString('2021/02/30')
+ * dateFromString('2021-02-30T12:34:56')
+ */
+export const dateFromString = (
+  lookupDate?: Date | string | { getTime: () => number },
+): Date => {
+  try {
+    // Debug logging for common issues
+    if (
+      lookupDate &&
+      typeof lookupDate === 'object' &&
+      !(lookupDate instanceof Date)
+    ) {
+      errorCatcher(new Error('Received non-Date object'), {
+        contexts: {
+          fn: {
+            constructor: (lookupDate as { constructor?: { name: string } })
+              .constructor?.name,
+            keys: Object.keys(lookupDate),
+            name: 'dateFromString',
+            type: typeof lookupDate,
+            value: lookupDate,
+          },
+        },
+      });
+    }
+
+    let date: Date;
+
+    if (!lookupDate) {
+      log(
+        "🔍 [dateFromString] No input, defaulting to today's date",
+        'dateUtils',
+        'warn',
+      );
+      date = new Date();
+    } else if (typeof lookupDate === 'object') {
+      date = parseObjectToDate(lookupDate);
+    } else if (typeof lookupDate === 'string') {
+      date = parseStringToDate(lookupDate);
+    } else {
+      throw new TypeError(`Unsupported input type: ${typeof lookupDate}`);
+    }
+
+    // Final validation and normalization
+    if (Number.isNaN(date.getTime())) {
+      throw new TypeError(
+        `Invalid date produced from: ${JSON.stringify(lookupDate)}`,
+      );
+    }
+
+    date.setHours(0, 0, 0, 0);
+    return date;
+  } catch (error) {
+    errorCatcher(error, {
+      contexts: { fn: { lookupDate, name: 'dateFromString' } },
+    });
+
+    const fallbackDate = new Date();
+    fallbackDate.setHours(0, 0, 0, 0);
+    return fallbackDate;
+  }
+};
+
+/**
+ * Checks if a date is in the past.
+ * @param lookupDate The date to check.
+ * @param includeToday Whether to include today as a past date. Default is false.
+ * @returns Whether the date is in the past.
+ */
+export const isInPast = (lookupDate: Date | string, includeToday = false) => {
+  try {
+    if (!lookupDate) return false;
+    const now = new Date();
+    return (
+      getDateDiff(dateFromString(lookupDate), now, 'days') <
+      (includeToday ? 1 : 0)
+    );
+  } catch (error) {
+    errorCatcher(error);
+    return false;
+  }
+};
+
+/**
+ * Converts a friendly day to a js day.
+ * @param day The friendly day to convert. Mon-Sun = 0-6.
+ * @returns The js day. Sun-Mon = 0-6.
+ */
+export const friendlyDayToJsDay = (day?: number) => {
+  try {
+    day ??= -1;
+    const firstDay = day === 6 ? 0 : Number.parseInt(day.toString()) + 1;
+    const correctedFirstDay = firstDay > 7 ? firstDay - 7 : firstDay;
+    return correctedFirstDay;
+  } catch (error) {
+    errorCatcher(error);
+    return 0;
+  }
+};
+
+/**
+ * Formats a date object to a local date string.
+ * @param dateObj The date object to format.
+ * @param locale The locale to format the date in.
+ * @returns The local date string.
+ */
+export const getLocalDate = (
+  dateObj: Date | string,
+  locale: Required<DateLocale>,
+  mask?: null | string,
+) => {
+  const parsedDate =
+    typeof dateObj === 'string'
+      ? new Date(dateObj.replace(/(\d{4})(\d{2})(\d{2})/, '$1/$2/$3'))
+      : dateObj;
+  // Fallback safely if mask is invalid or produces empty
+  const desired = formatDate(parsedDate, mask ?? 'D MMMM YYYY', locale);
+  if (desired?.trim()) return desired;
+  return formatDate(parsedDate, 'D MMMM YYYY', locale);
+};
+
+/**
+ * Checks if two dates are the same.
+ * @param date1 The first date to compare.
+ * @param date2 The second date to compare.
+ * @returns The result of the comparison.
+ */
+export const datesAreSame = (date1: Date | string, date2: Date | string) => {
+  try {
+    if (!date1 || !date2) throw new Error('Missing date for comparison');
+    return getDateDiff(date1, date2, 'days') === 0;
+  } catch (error) {
+    errorCatcher(error, {
+      contexts: { fn: { date1, date2, name: 'datesAreSame' } },
+    });
+    return false;
+  }
+};
+
+/**
+ * Gets a specific day from a week.
+ * @param lookupDate The week to get the specific day from.
+ * @param desiredWeekday The desired weekday. Mon-Sun = 0-6.
+ * @returns The desired date object.
+ */
+export const getSpecificWeekday = (
+  lookupDate: Date | string,
+  desiredWeekday: number,
+) => {
+  try {
+    if (!lookupDate) return new Date();
+    if (desiredWeekday === null) throw new Error('No desired weekday');
+    lookupDate = dateFromString(lookupDate);
+    const currentWeekday =
+      lookupDate.getDay() === 0 ? 6 : lookupDate.getDay() - 1;
+    const difference = desiredWeekday - currentWeekday;
+    const newDate = new Date(lookupDate.valueOf());
+    newDate.setDate(newDate.getDate() + difference);
+    return newDate;
+  } catch (error) {
+    errorCatcher(error);
+    return new Date();
+  }
+};
+
+// Taken from Quasar Date Utils
+
+const MILLISECONDS_IN_DAY = 86_400_000;
+const MILLISECONDS_IN_HOUR = 3_600_000;
+const MILLISECONDS_IN_MINUTE = 60_000;
+const defaultMask = 'YYYY-MM-DD';
+const token = /\[((?:[^[\]\\]|\\.)*)\]|d{1,4}|M{1,4}|D{1,4}|Y{2,4}/g;
+const defaultDateLocale: Required<DateLocale> = {
+  days: 'Sunday_Monday_Tuesday_Wednesday_Thursday_Friday_Saturday'.split('_'),
+  daysShort: 'Sun_Mon_Tue_Wed_Thu_Fri_Sat'.split('_'),
+  months:
+    'January_February_March_April_May_June_July_August_September_October_November_December'.split(
+      '_',
+    ),
+  monthsShort: 'Jan_Feb_Mar_Apr_May_Jun_Jul_Aug_Sep_Oct_Nov_Dec'.split('_'),
+};
+
+// workaround for < 1900 with new Date()
+const getFormatterYear = (date: Date, forcedYear?: number) =>
+  forcedYear ?? date.getFullYear();
+
+const formatter = {
+  // Day of month: 1, 2, ..., 31
+  D(date: Date) {
+    return date.getDate();
+  },
+
+  // Day of month: 01, 02, ..., 31
+  DD(date: Date) {
+    return pad(date.getDate());
+  },
+
+  // Day of week: Su, Mo, ...
+  dd(date: Date, dateLocale: Required<DateLocale>) {
+    return dateLocale.days[date.getDay()]?.slice(0, 2);
+  },
+
+  // Day of week: Sun, Mon, ...
+  ddd(date: Date, dateLocale: Required<DateLocale>) {
+    return dateLocale.daysShort[date.getDay()];
+  },
+
+  // Day of week: Sunday, Monday, ...
+  dddd(date: Date, dateLocale: Required<DateLocale>) {
+    return dateLocale.days[date.getDay()];
+  },
+
+  // Month: 1, 2, ..., 12
+  M(date: Date) {
+    return date.getMonth() + 1;
+  },
+
+  // Month: 01, 02, ..., 12
+  MM(date: Date) {
+    return pad(date.getMonth() + 1);
+  },
+
+  // Month Short Name: Jan, Feb, ...
+  MMM(date: Date, dateLocale: Required<DateLocale>) {
+    return dateLocale.monthsShort?.[date.getMonth()];
+  },
+
+  // Month Name: January, February, ...
+  MMMM(date: Date, dateLocale: Required<DateLocale>) {
+    return dateLocale.months?.[date.getMonth()];
+  },
+
+  // Year: 00, 01, ..., 99
+  YY(date: Date, _dateLocale: Required<DateLocale>, forcedYear?: number) {
+    const y = getFormatterYear(date, forcedYear) % 100;
+    return y >= 0 ? pad(y) : '-' + pad(Math.abs(y));
+  },
+
+  // Year: 1900, 1901, ..., 2099
+  YYYY(date: Date, _dateLocale: Required<DateLocale>, forcedYear?: number) {
+    return getFormatterYear(date, forcedYear);
+  },
+};
+
+export function addToDate(date: Date | string, mod: DateOptions) {
+  return getChange(dateFromString(date), mod, 1);
+}
+
+export function formatDate(
+  val: PotentialDate | undefined,
+  mask?: string,
+  dateLocale?: Required<DateLocale>,
+): string {
+  if ((val !== 0 && !val) || val === Infinity || val === -Infinity) {
+    return '';
+  }
+
+  const date = new Date(val);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  if (mask === void 0) {
+    mask = defaultMask;
+  }
+
+  const locale = getDateLocale(dateLocale);
+
+  return mask.replaceAll(token, (match, text) => {
+    let replacement: string;
+
+    if (match in formatter) {
+      const value = formatter[match as keyof typeof formatter](date, locale);
+      replacement = value === null || value === undefined ? '' : String(value);
+    } else if (text === void 0) {
+      replacement = match;
+    } else {
+      replacement = text.split(String.raw`\]`).join(']');
+    }
+
+    return replacement;
+  });
+}
+
+/**
+ * Calculates the difference between two dates (`date` - `subtract`).
+ *
+ * The result equals the number of `units` to add to `subtract` to get `date`.
+ * - If `date` is in the future relative to `subtract`, the result is **positive**.
+ * - If `date` is in the past relative to `subtract`, the result is **negative**.
+ *
+ * @param date The target date.
+ * @param subtract The date to subtract involved in the operation.
+ * @param unit The unit of measurement (default: 'days').
+ */
+export function getDateDiff(
+  date: PotentialDate,
+  subtract: PotentialDate,
+  unit: `${DateUnitOptions}s` | DateUnitOptions = 'days',
+): number {
+  const sub = new Date(subtract),
+    t = new Date(date);
+
+  switch (unit) {
+    case 'hour':
+    case 'hours':
+      return getDiff(
+        startOfDate(t, 'hour'),
+        startOfDate(sub, 'hour'),
+        MILLISECONDS_IN_HOUR,
+      );
+    case 'minute':
+    case 'minutes':
+      return getDiff(
+        startOfDate(t, 'minute'),
+        startOfDate(sub, 'minute'),
+        MILLISECONDS_IN_MINUTE,
+      );
+    case 'month':
+    case 'months':
+      return (
+        (t.getFullYear() - sub.getFullYear()) * 12 +
+        t.getMonth() -
+        sub.getMonth()
+      );
+    case 'second':
+    case 'seconds':
+      return getDiff(
+        startOfDate(t, 'second'),
+        startOfDate(sub, 'second'),
+        1000,
+      );
+
+    case 'year':
+    case 'years':
+      return t.getFullYear() - sub.getFullYear();
+
+    case 'date':
+    case 'day':
+    case 'days':
+    default:
+      return getDiff(
+        startOfDate(t, 'day'),
+        startOfDate(sub, 'day'),
+        MILLISECONDS_IN_DAY,
+      );
+  }
+}
+
+export function getMaxDate(
+  date: PotentialDate,
+  ...args: PotentialDate[]
+): Date {
+  let t = new Date(date);
+  Array.prototype.slice.call(args, 1).forEach((d) => {
+    // @ts-expect-error: Date is not Number
+    t = Math.max(t, new Date(d));
+  });
+  return t;
+}
+
+export function getMinDate(date: PotentialDate, ...args: PotentialDate[]) {
+  let t = new Date(date);
+  Array.prototype.slice.call(args, 1).forEach((d) => {
+    // @ts-expect-error: Date is not Number
+    t = Math.min(t, new Date(d));
+  });
+  return t;
+}
+
+export function subtractFromDate(date: PotentialDate, mod: DateOptions) {
+  return getChange(date, mod, -1);
+}
+
+function applyYearMonthDayChange(date: Date, mod: DateOptions, sign: number) {
+  let month = date.getMonth(),
+    year = date.getFullYear();
+
+  const day = date.getDate();
+
+  if (mod.year !== void 0) {
+    year += sign * mod.year;
+    delete mod.year;
+  }
+
+  if (mod.month !== void 0) {
+    month += sign * mod.month;
+    delete mod.month;
+  }
+
+  date.setDate(1);
+  date.setMonth(2);
+
+  date.setFullYear(year);
+  date.setMonth(month);
+  date.setDate(Math.min(day, daysInMonth(date)));
+
+  if (mod.date !== void 0) {
+    date.setDate(date.getDate() + sign * mod.date);
+    delete mod.date;
+  }
+
+  return date;
+}
+
+function daysInMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function getChange(date: PotentialDate, rawMod: DateOptions, sign: number) {
+  const d = new Date(date),
+    mod = normalizeMod(rawMod),
+    t =
+      mod.year !== void 0 || mod.month !== void 0 || mod.date !== void 0
+        ? applyYearMonthDayChange(d, mod, sign) // removes year/month/day
+        : d;
+
+  for (const key in mod) {
+    const op = capitalize(key);
+    // @ts-expect-error: op is not a key of Date
+    t[`set${op}`](t[`get${op}`]() + sign * mod[key]);
+  }
+
+  return t;
+}
+
+function getDateLocale(paramDateLocale?: Required<DateLocale>) {
+  return paramDateLocale ?? defaultDateLocale;
+}
+
+function getDiff(t: Date, sub: Date, interval: number) {
+  return (
+    (t.getTime() -
+      t.getTimezoneOffset() * MILLISECONDS_IN_MINUTE -
+      (sub.getTime() - sub.getTimezoneOffset() * MILLISECONDS_IN_MINUTE)) /
+    interval
+  );
+}
+
+function normalizeMod(mod: DateOptions) {
+  const acc = { ...mod };
+
+  if (mod.years !== void 0) {
+    acc.year = mod.years;
+    delete acc.years;
+  }
+
+  if (mod.months !== void 0) {
+    acc.month = mod.months;
+    delete acc.months;
+  }
+
+  if (mod.days !== void 0) {
+    acc.date = mod.days;
+    delete acc.days;
+  }
+  if (mod.day !== void 0) {
+    acc.date = mod.day;
+    delete acc.day;
+  }
+
+  if (mod.hour !== void 0) {
+    acc.hours = mod.hour;
+    delete acc.hour;
+  }
+
+  if (mod.minute !== void 0) {
+    acc.minutes = mod.minute;
+    delete acc.minute;
+  }
+
+  if (mod.second !== void 0) {
+    acc.seconds = mod.second;
+    delete acc.second;
+  }
+
+  if (mod.millisecond !== void 0) {
+    acc.milliseconds = mod.millisecond;
+    delete acc.millisecond;
+  }
+
+  return acc;
+}
+
+// From the largest unit down: the start of a unit resets that unit's own
+// field and every smaller one (the start of a month also resets the hours,
+// minutes, seconds and milliseconds).
+const START_OF_DATE_RESETS: {
+  reset: (date: Date) => void;
+  units: DateUnitOptions[];
+}[] = [
+  { reset: (date) => date.setMonth(0), units: ['year', 'years'] },
+  { reset: (date) => date.setDate(1), units: ['month', 'months'] },
+  { reset: (date) => date.setHours(0), units: ['date', 'day', 'days'] },
+  { reset: (date) => date.setMinutes(0), units: ['hour', 'hours'] },
+  { reset: (date) => date.setSeconds(0), units: ['minute', 'minutes'] },
+  { reset: (date) => date.setMilliseconds(0), units: ['second', 'seconds'] },
+];
+
+function startOfDate(date: PotentialDate, unit: DateUnitOptions) {
+  const t = new Date(date);
+  const firstReset = START_OF_DATE_RESETS.findIndex(({ units }) =>
+    units.includes(unit),
+  );
+  if (firstReset === -1) return t;
+
+  for (const { reset } of START_OF_DATE_RESETS.slice(firstReset)) {
+    reset(t);
+  }
+  return t;
+}

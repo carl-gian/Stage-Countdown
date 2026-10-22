@@ -1,0 +1,41 @@
+name: 'translator'
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  discussion:
+    types: [created, edited]
+  discussion_comment:
+    types: [created, edited]
+  pull_request:
+    types: [opened, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+jobs:
+  translate:
+    # Bot-authored events (Crowdin's l10n_master PRs, bot PRs and comments)
+    # are written in English and only reach the translation service because
+    # their short titles get misdetected as another language - which then
+    # fails intermittently. Skip them up front.
+    if: >-
+      github.event.sender.type != 'Bot' &&
+      github.event.pull_request.head.ref != 'l10n_master'
+    permissions:
+      issues: write
+      discussions: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: sircharlo/github-translate-action@4bc362d14b4d59ecf156401b7e92b9db522f75fc # v1.0.4
+        # Translation is best-effort: a translation-service hiccup shouldn't
+        # turn the check red on an issue or pull request.
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          IS_MODIFY_TITLE: true
+          APPEND_TRANSLATION: true
+          SKIP_ACTORS: 'dependabot[bot],mergify[bot]'
+          SECTIONS_TO_SKIP: 'Confirmations,Screenshots,Relevant log output'

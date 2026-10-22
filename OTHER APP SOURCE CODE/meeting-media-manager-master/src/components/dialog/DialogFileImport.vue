@@ -1,0 +1,409 @@
+<template>
+  <BaseDialog
+    v-model="dialogValue"
+    :dialog-id="dialogId"
+    persistent
+    @dragenter="dropHandler($event, 'dragenter')"
+    @dragover="dropHandler($event, 'dragover')"
+    @dragstart="dropHandler($event, 'dragstart')"
+    @drop="dropHandler($event, 'drop')"
+  >
+    <div
+      class="bg-secondary-contrast flex medium-overlay q-px-none"
+      style="flex-flow: column"
+    >
+      <!-- {{ totalFiles || (!!jwpubDb && jwpubLoading) }} -->
+      <div
+        class="row items-center no-wrap text-bigger text-semibold text-primary q-px-md q-pt-lg q-pb-md"
+      >
+        <div class="icon-chip q-mr-sm">
+          <q-icon name="mmm-add-media" size="xs" />
+        </div>
+        {{ jwpubTitle || t('add-extra-media') }}
+      </div>
+      <template v-if="jwpubDocuments?.length && !(!!jwpubDb && jwpubLoading)">
+        <div
+          v-if="jwpubDocuments?.length && !(!!jwpubDb && jwpubLoading)"
+          class="row q-px-md q-pb-sm text-body2 text-secondary"
+        >
+          {{ t('choose-a-document-for-import') }}
+        </div>
+        <div class="row q-px-md overflow-auto">
+          <q-list class="full-width">
+            <q-item
+              v-for="jwpubImportDocument in jwpubDocuments"
+              :key="jwpubImportDocument.DocumentId"
+              class="rounded-borders"
+              clickable
+              @click="handleJwpubImport(jwpubImportDocument)"
+            >
+              <q-item-section class="no-wrap">
+                <q-item-label>{{ jwpubImportDocument.Title }}</q-item-label>
+                <q-item-label
+                  v-if="
+                    formatPageLabel(
+                      t,
+                      jwpubImportDocument.FirstPageNumber,
+                      jwpubImportDocument.LastPageNumber,
+                    )
+                  "
+                  caption
+                >
+                  {{
+                    formatPageLabel(
+                      t,
+                      jwpubImportDocument.FirstPageNumber,
+                      jwpubImportDocument.LastPageNumber,
+                    )
+                  }}
+                </q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </div>
+      </template>
+      <template v-else-if="!!jwpubDb && jwpubLoading">
+        <div class="row q-px-md overflow-auto">
+          <q-list class="full-width">
+            <q-item
+              v-for="skeletonIndex in 6"
+              :key="skeletonIndex"
+              class="rounded-borders"
+            >
+              <q-item-section>
+                <q-skeleton height="20px" type="text" width="100%" />
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </div>
+      </template>
+      <template v-else>
+        <div class="row q-px-md">
+          <p>
+            {{ t('local-media-explain-1') }} {{ t('local-media-explain-2') }}
+            <q-icon
+              class="q-ml-xs cursor-pointer"
+              color="primary"
+              name="mmm-info"
+              size="xs"
+              tabindex="0"
+            >
+              <q-tooltip>
+                <div class="row">
+                  <strong>{{ t('images:') }}&nbsp;</strong>
+                  {{ imageExtensionsLabel }}
+                </div>
+                <div class="row">
+                  <strong>{{ t('videos:') }}&nbsp;</strong>
+                  {{ videoExtensionsLabel }}
+                </div>
+                <div class="row">
+                  <strong>{{ t('audio:') }}&nbsp;</strong>
+                  {{ audioExtensionsLabel }}
+                </div>
+                <div class="row">
+                  <strong>{{ t('other:') }}&nbsp;</strong>
+                  {{ otherExtensionsLabel }}
+                </div>
+              </q-tooltip>
+            </q-icon>
+          </p>
+        </div>
+        <div class="row q-px-md q-pt-md">
+          <div
+            ref="dropArea"
+            class="col rounded-borders dashed-border items-center justify-center flex bg-accent-100 animated slow"
+            :class="{
+              'cursor-pointer': canBrowseLocalFiles,
+              'bg-accent-200':
+                isOverDropZone || (hovering && canBrowseLocalFiles),
+            }"
+            :role="canBrowseLocalFiles ? 'button' : undefined"
+            style="min-height: 200px"
+            :tabindex="canBrowseLocalFiles ? 0 : undefined"
+            @click="browseLocalFiles"
+            @keydown.enter.space.prevent="browseLocalFiles"
+          >
+            <template v-if="totalFiles || (!!jwpubDb && jwpubLoading)">
+              <q-circular-progress
+                color="primary"
+                :indeterminate="totalFiles === 1"
+                :max="totalFiles"
+                size="xl"
+                track-color="accent-200"
+                :value="percentValue"
+              >
+                <div
+                  v-if="totalFiles > 1"
+                  class="absolute-full flex flex-center"
+                >
+                  <q-badge
+                    color="white"
+                    :label="(percentValue * 100).toFixed(0) + '%'"
+                    text-color="primary"
+                  />
+                </div>
+              </q-circular-progress>
+            </template>
+            <template v-else>
+              <q-icon class="q-mr-sm" name="mmm-drag-n-drop" size="lg" />
+              {{ t('drag-and-drop-or-click-to-browse') }}
+            </template>
+          </div>
+        </div>
+      </template>
+      <div class="row q-px-md q-py-md justify-end">
+        <q-btn flat :label="t('cancel')" @click="handleCancel" />
+      </div>
+    </div>
+  </BaseDialog>
+</template>
+
+<script setup lang="ts">
+import type { DocumentItem, MediaSectionIdentifier } from 'src/types';
+
+import { useDropZone, useElementHover, useEventListener } from '@vueuse/core';
+import BaseDialog from 'components/dialog/BaseDialog.vue';
+import {
+  AUDIO_EXTENSIONS,
+  IMG_EXTENSIONS,
+  OTHER_EXTENSIONS,
+  VIDEO_EXTENSIONS,
+} from 'src/constants/media';
+import { errorCatcher } from 'src/helpers/error-catcher';
+import { log } from 'src/shared/vanilla';
+import { formatPageLabel } from 'src/utils/general';
+import { computed, onUnmounted, ref, useTemplateRef, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
+// toSorted, not sort: the extension lists are shared constants, and sorting
+// them in place would reorder them for every other module that reads them.
+const formatExtensions = (extensions: string[]) =>
+  extensions.toSorted().join(', ');
+const imageExtensionsLabel = formatExtensions(IMG_EXTENSIONS);
+const videoExtensionsLabel = formatExtensions(VIDEO_EXTENSIONS);
+const audioExtensionsLabel = formatExtensions(AUDIO_EXTENSIONS);
+const otherExtensionsLabel = formatExtensions(OTHER_EXTENSIONS);
+
+const props = defineProps<{
+  currentFile: number;
+  dialogId: string;
+  jwpubDb?: string;
+  jwpubDocuments?: DocumentItem[];
+  jwpubTitle?: string;
+  modelValue: boolean;
+  section: MediaSectionIdentifier | undefined;
+  totalFiles: number;
+}>();
+
+const emit = defineEmits<{
+  cancel: [];
+  ok: [];
+  'update:jwpub-db': [value: string];
+  'update:jwpub-documents': [value: DocumentItem[]];
+  'update:modelValue': [value: boolean];
+}>();
+
+const dialogValue = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value),
+});
+
+const jwpubDb = computed({
+  get: () => props.jwpubDb ?? '',
+  set: (value) => emit('update:jwpub-db', value),
+});
+
+const jwpubDocuments = computed({
+  get: () => props.jwpubDocuments || [],
+  set: (value) => emit('update:jwpub-documents', value),
+});
+
+const dropArea = useTemplateRef('dropArea');
+const hovering = useElementHover(dropArea);
+const authorizedDrop = ref(false);
+const jwpubLoading = ref(false);
+
+const percentValue = computed(() => {
+  return props.currentFile && props.totalFiles
+    ? props.currentFile / props.totalFiles
+    : 0;
+});
+
+// Listen for JW Playlist mode activation
+useEventListener(
+  globalThis,
+  'openJwPlaylistDialog',
+  () => {
+    log(
+      '🎯 JW Playlist mode activated, closing file import dialog',
+      'fileImport',
+      'log',
+    );
+    // Reset JW PUB data when switching to JW playlist dialog
+    jwpubLoading.value = false;
+    jwpubDb.value = '';
+    jwpubDocuments.value = [];
+    dialogValue.value = false;
+    emit('cancel');
+  },
+  { passive: true },
+);
+
+// Reset state when component unmounts
+onUnmounted(() => {
+  hovering.value = false;
+  jwpubDb.value = '';
+  jwpubLoading.value = false;
+  jwpubDocuments.value = [];
+  authorizedDrop.value = false;
+});
+
+const getLocalFiles = () => {
+  globalThis.electronApi
+    .openFileDialog()
+    .then((result) => {
+      if (result && result.filePaths.length > 0) {
+        globalThis.dispatchEvent(
+          new CustomEvent<{
+            files: (File | string)[];
+            section: MediaSectionIdentifier | undefined;
+          }>('localFiles-browsed', {
+            detail: { files: result.filePaths, section: props.section },
+          }),
+        );
+      }
+    })
+    .catch((error) => {
+      errorCatcher(error);
+    });
+};
+
+// The drop zone doubles as a "browse" button, but only while it shows its
+// idle prompt - not while it shows import progress or a JWPUB is loading.
+const canBrowseLocalFiles = computed(
+  () => !props.totalFiles && !(!!jwpubDb.value || jwpubLoading.value),
+);
+
+const browseLocalFiles = () => {
+  if (canBrowseLocalFiles.value) getLocalFiles();
+};
+
+const dropHandler = (event: DragEvent, eventType: string) => {
+  if (eventType !== 'drop') {
+    // Prevent the default for the drag event, to eventually allow the drop event to be fired
+    event.preventDefault();
+  } else if (eventType === 'drop') {
+    if (!authorizedDrop.value) {
+      // Prevent the drop event from propagating, since it's outside the drop area
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      // Animate the drop area
+      const element = dropArea.value;
+      if (element) {
+        element.classList.add('shakeX');
+        // Remove the animation class after the animation ends
+        element.addEventListener(
+          'animationend',
+          () => {
+            element.classList.remove('shakeX');
+          },
+          { once: true, passive: true },
+        );
+      }
+    }
+  }
+};
+
+function onDrop() {
+  authorizedDrop.value = true;
+}
+
+const { isOverDropZone } = useDropZone(dropArea, {
+  onDrop,
+  preventDefaultForUnhandled: true,
+});
+
+const handleJwpubImport = (jwpubImportDocument: DocumentItem) => {
+  log(
+    '🎯 Emitting openJwpubMediaPicker event for document:',
+    'fileImport',
+    'log',
+    jwpubImportDocument,
+  );
+  globalThis.dispatchEvent(
+    new CustomEvent<{
+      dbPath: string;
+      document: DocumentItem;
+    }>('openJwpubMediaPicker', {
+      detail: {
+        dbPath: jwpubDb.value,
+        document: jwpubImportDocument,
+      },
+    }),
+  );
+  dialogValue.value = false;
+};
+
+const importSingleJwpubDocument = () => {
+  if (!dialogValue.value) return;
+  if (!jwpubDb.value || jwpubLoading.value) return;
+  if (jwpubDocuments.value.length !== 1) return;
+
+  const document = jwpubDocuments.value[0];
+  if (!document) return;
+
+  handleJwpubImport(document);
+};
+
+const handleCancel = () => {
+  // Reset loading states and JW PUB data
+  jwpubLoading.value = false;
+  jwpubDb.value = '';
+  jwpubDocuments.value = [];
+  dialogValue.value = false;
+  emit('cancel');
+};
+
+// Watch for dialog closing to reset loading states and data
+watch(
+  () => dialogValue.value,
+  (isOpen) => {
+    if (!isOpen) {
+      // Reset loading states and data when dialog closes
+      jwpubLoading.value = false;
+      // Don't clear jwpubDb here as it might be needed by the media picker
+      jwpubDocuments.value = [];
+    }
+  },
+);
+
+// Watch for a single JWPUB document and skip the document picker.
+watch(
+  () => [
+    dialogValue.value,
+    jwpubDb.value,
+    jwpubLoading.value,
+    jwpubDocuments.value,
+  ],
+  importSingleJwpubDocument,
+);
+
+// Watch for processing completion to auto-close dialog
+watch(
+  () => props.totalFiles || (!!jwpubDb.value && jwpubLoading.value),
+  (isProcessing, wasProcessing) => {
+    // Only close if we were processing and now we're not
+    if (wasProcessing && !isProcessing && dialogValue.value) {
+      log(
+        '🎯 File processing complete, auto-closing dialog',
+        'fileImport',
+        'log',
+      );
+      dialogValue.value = false;
+    }
+  },
+);
+</script>
