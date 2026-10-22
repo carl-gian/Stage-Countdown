@@ -3,81 +3,94 @@ import type { TimerState, TimerSettings } from '@/types';
 
 const STORAGE_KEY = 'stagecountdown:visual';
 
+/**
+ * Wall-clock countdown. It stores an absolute end time and recomputes from Date.now(), driven by a
+ * timer (not requestAnimationFrame), so it keeps going when the window is minimized or covered.
+ * React state only changes once per displayed second; smooth visuals are drawn by TimerDisplay.
+ */
 export function useCountdownTimer() {
   const [state, setState] = useState<TimerState>('idle');
   const [settings, setSettings] = useState<TimerSettings>({ minutes: 5, seconds: 0 });
   const [totalMs, setTotalMs] = useState(0);
   const [remainingMs, setRemainingMs] = useState(0);
-  const rafRef = useRef<number | null>(null);
-  const endRef = useRef<number>(0);
-  const pausedRef = useRef<number>(0);
+  const [endsAt, setEndsAt] = useState(0);
+
+  const endRef = useRef(0);
+  const pausedRef = useRef(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const durationMs = settings.minutes * 60_000 + settings.seconds * 1000;
 
-  const tick = useCallback(() => {
-    const now = performance.now();
-    const rem = endRef.current - now;
-    if (rem <= 0) {
-      setRemainingMs(0);
-      setState('complete');
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-      return;
-    }
-    setRemainingMs(rem);
-    rafRef.current = requestAnimationFrame(tick);
+  const clearTimers = useCallback(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (endTimeoutRef.current) clearTimeout(endTimeoutRef.current);
+    intervalRef.current = null;
+    endTimeoutRef.current = null;
   }, []);
 
-  const start = useCallback(() => {
-    const ms = settings.minutes * 60_000 + settings.seconds * 1000;
-    if (ms <= 0) return;
-    setTotalMs(ms);
-    setRemainingMs(ms);
-    endRef.current = performance.now() + ms;
-    setState('running');
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(tick);
-  }, [settings, tick]);
+  const tick = useCallback(() => {
+    const rem = endRef.current - Date.now();
+    if (rem <= 0) {
+      clearTimers();
+      setRemainingMs(0);
+      setEndsAt(0);
+      setState('complete');
+      return;
+    }
+    // Same displayed second -> same value -> React skips the render.
+    setRemainingMs((prev) => (Math.ceil(prev / 1000) === Math.ceil(rem / 1000) ? prev : rem));
+  }, [clearTimers]);
+
+  const run = useCallback(
+    (ms: number) => {
+      clearTimers();
+      endRef.current = Date.now() + ms;
+      setEndsAt(endRef.current);
+      setRemainingMs(ms);
+      setState('running');
+      intervalRef.current = setInterval(tick, 200);
+      endTimeoutRef.current = setTimeout(tick, ms + 5); // finish on time, not up to 200ms late
+    },
+    [clearTimers, tick]
+  );
+
+  /** Starts a fresh countdown. `overrideMs` is used by "Countdown to Time". */
+  const start = useCallback(
+    (overrideMs?: number) => {
+      const ms = overrideMs ?? settings.minutes * 60_000 + settings.seconds * 1000;
+      if (ms <= 0) return;
+      setTotalMs(ms);
+      run(ms);
+    },
+    [settings, run]
+  );
 
   const pause = useCallback(() => {
     if (state !== 'running') return;
-    pausedRef.current = remainingMs;
+    pausedRef.current = Math.max(0, endRef.current - Date.now());
+    clearTimers();
+    setRemainingMs(pausedRef.current);
+    setEndsAt(0);
     setState('paused');
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  }, [state, remainingMs]);
+  }, [state, clearTimers]);
 
   const resume = useCallback(() => {
     if (state !== 'paused') return;
-    endRef.current = performance.now() + pausedRef.current;
-    setState('running');
-    rafRef.current = requestAnimationFrame(tick);
-  }, [state, tick]);
+    run(pausedRef.current);
+  }, [state, run]);
 
   const stop = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
+    clearTimers();
     setState('idle');
     setRemainingMs(0);
     setTotalMs(0);
-  }, []);
+    setEndsAt(0);
+  }, [clearTimers]);
 
-  const restart = useCallback(() => {
-    stop();
-    setTimeout(start, 50);
-  }, [stop, start]);
+  const restart = useCallback(() => start(), [start]);
 
-  const complete = useCallback(() => {
-    stop();
-  }, [stop]);
-
-  useEffect(() => {
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
+  useEffect(() => clearTimers, [clearTimers]);
 
   return {
     state,
@@ -85,25 +98,14 @@ export function useCountdownTimer() {
     setSettings,
     totalMs,
     remainingMs,
+    endsAt,
     durationMs,
-    progress: totalMs > 0 ? 1 - remainingMs / totalMs : 0,
     start,
     pause,
     resume,
     stop,
     restart,
-    complete,
   };
-}
-
-export function loadVisualSettings<T>(fallback: T): T {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...fallback, ...JSON.parse(raw) };
-  } catch {
-    // ignore
-  }
-  return fallback;
 }
 
 export function saveVisualSettings(settings: unknown) {

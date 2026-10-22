@@ -250,7 +250,7 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
       window.electronAPI.getDisplays().then(setDisplays).catch(() => setDisplays([]));
     }
     if (window.electronAPI?.getConfig) {
-      window.electronAPI.getConfig().then((config: any) => {
+      window.electronAPI.getConfig().then((config: { lastDisplayId?: number | string | null; hideShortcut?: Partial<ShortcutValue> } | null) => {
         if (config?.lastDisplayId != null) setSelectedDisplayId(String(config.lastDisplayId));
         if (config?.hideShortcut) setHideShortcut({ ...DEFAULT_SHORTCUT, ...config.hideShortcut });
       }).catch(() => {});

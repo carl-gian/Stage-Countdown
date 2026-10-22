@@ -21,17 +21,30 @@ countdown on a stage display and hides/shows the **Meeting Media Manager (M³)**
 ## 1. How M³ is controlled
 
 There is no data link to M³. The app:
-1. Focuses M³'s window (title matches `*Meeting media - M*`) via PowerShell/`EnumWindows`.
+1. Focuses M³'s window (title contains `m3WindowTitle`, default `Meeting media - M`) through a **resident PowerShell worker**
+   (`PS_SCRIPT` in `electron/main.cjs`: compiled once at app start, commands are `id|focus|…` / `id|key|…` lines). Focus is
+   **verified** (`GetForegroundWindow`, up to 3 tries); if it fails, no hotkey is sent and the UI shows the error.
 2. Sends M³'s hide/show hotkey with `keybd_event` (default Shift+Alt+F3, set in Settings, stored as `hideShortcut`).
-It cannot tell whether M³'s media is currently shown or hidden: it assumes it starts shown and toggles.
+
+M³'s hotkey is a **toggle that cannot be read back**, so main tracks `m3Hidden`. Start only hides if it believes M³ is
+shown; end/stop only restore if it believes M³ is hidden. The controller shows "M³ media: Shown/Hidden" with **Toggle** (send the
+hotkey) and **Fix label** (correct the belief without sending anything). Closing the controller while M³ is hidden restores it first.
 
 ## 2. Sequences (src/App.tsx) — timing was tuned on a live rig
 
+All three run under one lock (`busyRef`), so two M³ toggles can never overlap.
+
 | Event | Steps |
 |---|---|
-| Start (manual or scheduled) | focus M³ + hotkey (500 ms holds in main) → wait 500 ms → timer starts |
-| Complete | pulse 1400 ms → fade stage to black 500 ms → close stage window → focus M³ + hotkey → optional quit |
-| Stop | stop timer → fade 500 ms → close stage window → focus M³ + hotkey (never quits) |
+| Start (manual or scheduled) | open stage window on saved display → focus M³ + hide (≈0.7 s) → wait 500 ms → timer starts |
+| Start via "Countdown to Time" | same, but the duration is computed AFTER the sequence so the countdown ends exactly on the target |
+| Complete | heartbeat 1400 ms → fade stage to black 500 ms → close stage window → restore M³ → optional quit |
+| Stop | stop timer → fade 500 ms → close stage window → restore M³ (never quits) |
+
+The clock is wall-time (`endsAt = Date.now() + ms`) driven by timers, not rAF, and both windows have `backgroundThrottling:
+false`, so it keeps running when minimized. The stage gets `{state, totalMs, remainingMs, endsAt, visual, blackout}` only when
+something changes and paints its own ring/digits straight to the DOM (no React renders while running). A new stage window is
+replayed the last state on load.
 
 ## 3. Code map
 
@@ -40,7 +53,8 @@ electron/main.cjs      windows, IPC handlers, PowerShell (focus + hotkey), confi
 electron/logic.cjs     PURE helpers (deepMerge, shortcutToKeys, scheduleDueKey) — unit tested
 electron/preload.cjs   the window.electronAPI bridge (typed in src/electron.d.ts)
 src/App.tsx            sequences, controller/stage routing (?view=stage)
-src/hooks/useCountdownTimer.ts   rAF countdown
+src/hooks/useCountdownTimer.ts   wall-clock countdown (endsAt)
+src/lib/time.ts        formatCountdown, nextOccurrence (tested)
 src/components/        Controller, TimerDisplay (stage), SettingsModal, ScheduleSettings
 tests/                 vitest
 ```
@@ -61,14 +75,12 @@ npm run build:win      local Windows installer (release/)
 
 Always run `npm test` and `npm run typecheck` before committing.
 
-## 5. Known issues (baseline when this workflow was set up)
+## 5. Known issues
 
-- `typecheck`: 4 errors in `TimerDisplay.tsx` — code reads `visual.staticRing.*` and `visual.text.shadow`, which are not in
-  `VisualSettings` (types.ts); `progressRing.glow` is a boolean in types but used as a px number.
-- `lint`: 8 `no-explicit-any` errors (App.tsx, SettingsModal.tsx).
-- `electron/main.cjs` was out of sync with the preload until build 1.0.0+setup; `get-config`, `set-config`,
-  `select-and-signal-m3`, scheduler and login item were added then and are **untested on a real Windows rig**.
-- macOS is unsupported (PowerShell). Screen-selection IDs from `get-displays` are numbers but the Settings UI stores strings.
+- Everything Windows-specific (PowerShell worker, focus verification, hotkey, always-on-top stage, controller-close restore,
+  minimized timing) was written on a Mac and is **untested on a real Windows rig**: run `docs/TEST-CHECKLIST.md` before a live meeting.
+- macOS is unsupported (PowerShell).
+- Installed copies don't self-update (no `electron-updater`).
 
 ## 6. Pitfalls
 

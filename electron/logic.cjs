@@ -4,6 +4,7 @@ const DEFAULT_SHORTCUT = { ctrl: false, alt: true, shift: true, code: 'F3' };
 
 const DEFAULT_CONFIG = {
   lastDisplayId: null,
+  m3WindowTitle: 'Meeting media - M',
   hideShortcut: DEFAULT_SHORTCUT,
   visual: null,
   startMinimized: false,

@@ -4,26 +4,25 @@ import Controller from '@/components/Controller';
 import TimerDisplay from '@/components/TimerDisplay';
 import SettingsModal from '@/components/SettingsModal';
 import { useCountdownTimer, saveVisualSettings } from '@/hooks/useCountdownTimer';
-import { DEFAULT_VISUAL_SETTINGS, type VisualSettings } from '@/types';
+import { DEFAULT_VISUAL_SETTINGS, mergeVisual, type StageState, type VisualSettings } from '@/types';
+import { nextOccurrence } from '@/lib/time';
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function safeLoadVisualSettings(): VisualSettings {
   try {
     const raw = window.localStorage.getItem('stagecountdown:visual');
-    if (!raw) return DEFAULT_VISUAL_SETTINGS;
-    const saved = JSON.parse(raw);
-    const merged: any = { ...DEFAULT_VISUAL_SETTINGS };
-    for (const key of Object.keys(DEFAULT_VISUAL_SETTINGS as any)) {
-      merged[key] = {
-        ...(DEFAULT_VISUAL_SETTINGS as any)[key],
-        ...(saved && typeof saved[key] === 'object' ? saved[key] : {}),
-      };
-    }
-    return merged as VisualSettings;
+    return raw ? mergeVisual(JSON.parse(raw)) : DEFAULT_VISUAL_SETTINGS;
   } catch {
     return DEFAULT_VISUAL_SETTINGS;
   }
+}
+
+/** What we last did to M3 ("hidden" is our belief: its hotkey is a toggle we can't read back). */
+interface M3Status {
+  ok: boolean;
+  hidden: boolean;
+  error?: string;
 }
 
 function App() {
@@ -54,8 +53,26 @@ function ControllerView() {
   const [targetTimeMode, setTargetTimeMode] = useState(false);
   const [targetTimeValue, setTargetTimeValue] = useState('');
 
-  const isStartingRef = useRef(false);
+  // One lock for every sequence (start, complete, stop) so two M3 toggles can never overlap.
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [starting, setStarting] = useState(false);
+  const targetAtRef = useRef(0); // absolute "Countdown to Time" target (epoch ms)
+  const [m3, setM3] = useState<M3Status>({ ok: true, hidden: false });
+  const [confirmRequest, setConfirmRequest] = useState<{ message: string; resolve: (v: boolean) => void } | null>(null);
+
+  const askConfirm = useCallback(
+    (message: string) => new Promise<boolean>((resolve) => setConfirmRequest({ message, resolve })),
+    []
+  );
+
+  const applyM3 = useCallback((status?: M3Status) => {
+    if (status) setM3(status);
+  }, []);
+
+  useEffect(() => {
+    window.electronAPI?.getM3State?.().then(applyM3).catch(() => {});
+  }, [applyM3]);
   const [configLoaded, setConfigLoaded] = useState(false);
 
   // Drives the stage window's black safety-curtain during the ~1s window
@@ -75,16 +92,7 @@ function ControllerView() {
     (async () => {
       try {
         const config = await window.electronAPI?.getConfig?.();
-        if (config?.visual) {
-          const merged: any = { ...DEFAULT_VISUAL_SETTINGS };
-          for (const key of Object.keys(DEFAULT_VISUAL_SETTINGS as any)) {
-            merged[key] = {
-              ...(DEFAULT_VISUAL_SETTINGS as any)[key],
-              ...(config.visual[key] || {}),
-            };
-          }
-          setVisual(merged as VisualSettings);
-        }
+        if (config?.visual) setVisual(mergeVisual(config.visual));
       } finally {
         setConfigLoaded(true);
       }
@@ -98,18 +106,18 @@ function ControllerView() {
     }
   }, [visual, configLoaded]);
 
+  // Sent only when something changes (not every frame). The stage runs its own clock from endsAt.
   useEffect(() => {
-    if (window.electronAPI?.syncStateToStage) {
-      window.electronAPI.syncStateToStage({
-        remainingMs: timer.remainingMs,
-        totalMs: timer.totalMs,
-        progress: timer.progress,
-        state: timer.state,
-        visual: visual,
-        blackout: stageBlackout,
-      });
-    }
-  }, [timer.remainingMs, timer.totalMs, timer.progress, timer.state, visual, stageBlackout]);
+    const payload: StageState = {
+      state: timer.state,
+      totalMs: timer.totalMs,
+      remainingMs: timer.state === 'running' ? 0 : timer.remainingMs,
+      endsAt: timer.endsAt,
+      visual,
+      blackout: stageBlackout,
+    };
+    window.electronAPI?.syncStateToStage?.(payload);
+  }, [timer.state, timer.totalMs, timer.endsAt, timer.state === 'running' ? 0 : timer.remainingMs, visual, stageBlackout]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const togglePin = useCallback(async () => {
     const newPinned = !pinned;
@@ -119,39 +127,33 @@ function ControllerView() {
     }
   }, [pinned]);
 
-  // --- START SEQUENCE (steps 1, 2, 3, 9) ------------------------------
-  // 1: main.cjs selects M3's window (holds 500ms)
-  // 2: main.cjs sends the hide/show shortcut (holds 500ms)
-  //    — trigger-shortcut only resolves once both of the above are truly
-  //      done, not just fired.
-  // 3: give the stage's 500ms reveal transition room to play
-  // 9: the timer actually starts
+  // --- START SEQUENCE -------------------------------------------------
+  // open stage window -> focus M3 + hide it (main verifies focus) -> 500ms for the stage reveal -> timer starts
   const runStartSequence = useCallback(
     async (startFn: () => void, opts?: { interactive?: boolean }) => {
-      if (isStartingRef.current || timer.state === 'running') return;
-
-      const interactive = opts?.interactive !== false;
-      if (interactive && pendingCloseReconfirm) {
-        const keep = window.confirm(
-          'The last countdown was stopped early while "Close StageCountdown after Timer ends" was on.\n\nKeep it enabled for this countdown?'
-        );
-        setAutoClose(keep);
-        setPendingCloseReconfirm(false);
+      if (busyRef.current || timer.state === 'running' || timer.state === 'paused') return;
+      busyRef.current = true;
+      setBusy(true);
+      try {
+        if (opts?.interactive !== false && pendingCloseReconfirm) {
+          const keep = await askConfirm(
+            'The last countdown was stopped early while "Close StageCountdown after Timer ends" was on.\n\nKeep it enabled for this countdown?'
+          );
+          setAutoClose(keep);
+          setPendingCloseReconfirm(false);
+        }
+        setStarting(true);
+        await window.electronAPI?.openStageWindow?.();
+        applyM3(await window.electronAPI?.triggerShortcut?.());
+        await delay(500);
+        startFn();
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+        setStarting(false);
       }
-
-      isStartingRef.current = true;
-      setStarting(true);
-
-      if (window.electronAPI?.triggerShortcut) {
-        await window.electronAPI.triggerShortcut(); // steps 1 + 2
-      }
-      await delay(500); // step 3
-
-      startFn(); // step 9
-      isStartingRef.current = false;
-      setStarting(false);
     },
-    [timer.state, pendingCloseReconfirm]
+    [timer.state, pendingCloseReconfirm, askConfirm, applyM3]
   );
 
   const handleStart = useCallback(() => {
@@ -164,48 +166,42 @@ function ControllerView() {
     runStartSequence(() => timer.restart());
   }, [runStartSequence, timer]);
 
-  // Scheduled auto-timer fires unattended — never pop a blocking confirm()
-  // for it, so it's explicitly non-interactive.
+  // Scheduled auto-timer fires unattended — never a blocking dialog for it.
   useEffect(() => {
     if (!window.electronAPI?.onScheduledStart) return;
     const unsubscribe = window.electronAPI.onScheduledStart(({ durationMinutes }: { durationMinutes: number }) => {
       if (timer.state === 'running') return;
       setTargetTimeMode(false);
       setTargetTimeValue('');
-      timer.setSettings({ ...timer.settings, minutes: durationMinutes ?? 5, seconds: 0 });
-      runStartSequence(() => timer.start(), { interactive: false });
+      const minutes = durationMinutes ?? 5;
+      timer.setSettings({ minutes, seconds: 0 });
+      runStartSequence(() => timer.start(minutes * 60_000), { interactive: false });
     });
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer.state, runStartSequence]);
 
-  // --- END SEQUENCE, natural completion (steps 4, 5, 1, 2, then 6 or 7) --
-  const runCompletionSequence = useCallback(async (closeAfter: boolean) => {
-    // Step 4: let the heartbeat pulse (driven by state === 'complete' in
-    // TimerDisplay) actually play for a beat before cutting away.
-    await delay(1400);
-
-    // Step 5: fade the stage to black, then close its window outright —
-    // no more fading back to transparent and leaving it open.
-    setStageBlackout(true);
-    await delay(500);
-    if (window.electronAPI?.closeStageWindow) {
-      window.electronAPI.closeStageWindow();
-    }
-    setStageBlackout(false);
-
-    // Steps 1 & 2 again: reselect M3 and toggle its Yeartext back on. The
-    // stage window is already closed at this point, so this uses the
-    // window-agnostic call rather than trigger-shortcut.
-    if (window.electronAPI?.selectAndSignalM3) {
-      await window.electronAPI.selectAndSignalM3();
-    }
-
-    if (closeAfter) {
-      if (window.electronAPI?.closeApp) window.electronAPI.closeApp(); // step 7
-    }
-    // else: step 6 — controller just sits idle, nothing further to do.
-  }, []);
+  // --- END SEQUENCE, natural completion ---------------------------------
+  // heartbeat (1.4s) -> fade stage to black (500ms) -> close stage -> restore M3 -> optional quit
+  const runCompletionSequence = useCallback(
+    async (closeAfter: boolean) => {
+      busyRef.current = true;
+      setBusy(true);
+      try {
+        await delay(1400);
+        setStageBlackout(true);
+        await delay(500);
+        await window.electronAPI?.closeStageWindow?.();
+        setStageBlackout(false);
+        applyM3(await window.electronAPI?.selectAndSignalM3?.());
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+      if (closeAfter) window.electronAPI?.closeApp?.();
+    },
+    [applyM3]
+  );
 
   const prevTimerState = useRef(timer.state);
   useEffect(() => {
@@ -217,33 +213,48 @@ function ControllerView() {
     prevTimerState.current = timer.state;
   }, [timer.state, autoClose, runCompletionSequence]);
 
-  // --- STOP SEQUENCE, user-cancelled mid-timer (steps 10, 5, 1, 2, 6) ----
-  // Always ends at 6 (idle) regardless of autoClose — stopping never
-  // closes the app. If autoClose was on, remember to ask about it again
-  // on the next Start instead.
+  // --- STOP SEQUENCE (user-cancelled): never quits; asks about auto-close again on the next Start ---
   const handleStop = useCallback(async () => {
-    const wasAutoClose = autoClose;
-    timer.stop(); // step 10
-    setTargetTimeMode(false);
-    setTargetTimeValue('');
-    if (wasAutoClose) setPendingCloseReconfirm(true);
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const wasAutoClose = autoClose;
+      timer.stop();
+      setTargetTimeMode(false);
+      setTargetTimeValue('');
+      if (wasAutoClose) setPendingCloseReconfirm(true);
 
-    setStageBlackout(true); // step 5 (fade)
-    await delay(500);
-    if (window.electronAPI?.closeStageWindow) {
-      window.electronAPI.closeStageWindow(); // step 5 (close, no wait)
+      setStageBlackout(true);
+      await delay(500);
+      await window.electronAPI?.closeStageWindow?.();
+      setStageBlackout(false);
+      applyM3(await window.electronAPI?.selectAndSignalM3?.());
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
-    setStageBlackout(false);
-
-    if (window.electronAPI?.selectAndSignalM3) {
-      await window.electronAPI.selectAndSignalM3(); // steps 1 + 2
-    }
-    // step 6 — idle, always (stopping never closes the app)
-  }, [timer, autoClose]);
+  }, [timer, autoClose, applyM3]);
 
   const handleSetNewTime = useCallback(() => {
     handleStop();
   }, [handleStop]);
+
+  const handleToggleM3 = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      applyM3(await window.electronAPI?.toggleM3?.());
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [applyM3]);
+
+  const handleFlipM3Label = useCallback(async () => {
+    applyM3(await window.electronAPI?.setM3State?.(!m3.hidden));
+  }, [m3.hidden, applyM3]);
 
   const handleTargetTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -254,20 +265,10 @@ function ControllerView() {
       return;
     }
 
-    const [hours, minutes] = value.split(':').map(Number);
-    const now = new Date();
-    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0);
-
-    if (target.getTime() < now.getTime()) {
-      target.setDate(target.getDate() + 1);
-    }
-
-    const diffMs = target.getTime() - now.getTime();
+    // Preview only: the real duration is worked out when Start is pressed.
+    const diffMs = nextOccurrence(value, new Date()).getTime() - Date.now();
     const totalSeconds = Math.floor(diffMs / 1000);
-    const m = Math.floor(totalSeconds / 60);
-    const s = totalSeconds % 60;
-
-    timer.setSettings({ ...timer.settings, minutes: m, seconds: s });
+    timer.setSettings({ ...timer.settings, minutes: Math.floor(totalSeconds / 60), seconds: totalSeconds % 60 });
     setTargetTimeMode(true);
   };
 
@@ -276,10 +277,13 @@ function ControllerView() {
     setTargetTimeMode(false);
   }, []);
 
+  // The countdown must END at the target: fix the target now, then size the timer after the
+  // start sequence (which takes ~1.5s) so none of that time is lost.
   const handleStartTargetCountdown = useCallback(() => {
-    if (!targetTimeMode) return;
-    handleStart();
-  }, [targetTimeMode, handleStart]);
+    if (!targetTimeMode || !targetTimeValue) return;
+    targetAtRef.current = nextOccurrence(targetTimeValue, new Date()).getTime();
+    runStartSequence(() => timer.start(Math.max(1000, targetAtRef.current - Date.now())));
+  }, [targetTimeMode, targetTimeValue, runStartSequence, timer]);
 
   const noopNumberHandler = useCallback(() => {}, []);
 
@@ -287,7 +291,7 @@ function ControllerView() {
     ? { background: `linear-gradient(135deg, ${visual.background.color1}, ${visual.background.color2})` }
     : { background: visual?.background?.color1 || 'transparent' };
 
-  const manualControlsLocked = targetTimeMode || timer.state === 'running' || starting;
+  const manualControlsLocked = targetTimeMode || timer.state === 'running' || starting || busy;
 
   return (
     <div className="w-screen h-screen overflow-hidden relative">
@@ -304,13 +308,13 @@ function ControllerView() {
               type="time"
               value={targetTimeValue}
               onChange={handleTargetTimeChange}
-              disabled={timer.state === 'running' || starting}
+              disabled={timer.state === 'running' || starting || busy}
               className="bg-gray-800 text-white rounded px-2 py-1 outline-none text-sm disabled:opacity-50 flex-1 min-w-0"
             />
             {targetTimeMode && (
               <button
                 onClick={handleClearTargetTime}
-                disabled={timer.state === 'running' || starting}
+                disabled={timer.state === 'running' || starting || busy}
                 title="Clear target time"
                 className="text-gray-400 hover:text-white text-sm px-1.5 disabled:opacity-30"
               >
@@ -319,7 +323,7 @@ function ControllerView() {
             )}
             <button
               onClick={handleStartTargetCountdown}
-              disabled={!targetTimeMode || timer.state === 'running' || starting}
+              disabled={!targetTimeMode || timer.state === 'running' || starting || busy}
               className="px-3 py-1.5 rounded-md text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
             >
               Start
@@ -336,6 +340,7 @@ function ControllerView() {
           >
             {autoClose ? '✓ WILL CLOSE AFTER TIMER ENDS' : 'Close StageCountdown after Timer end'}
           </button>
+          <M3StatusRow status={m3} busy={busy} onToggle={handleToggleM3} onFlip={handleFlipM3Label} />
         </div>
 
         <div className="flex-1 min-h-0">
@@ -359,9 +364,9 @@ function ControllerView() {
             starting={starting}
           >
             <TimerDisplay
-              remainingMs={timer.remainingMs}
+              remainingMs={timer.state === 'idle' ? timer.durationMs : timer.remainingMs}
               totalMs={timer.totalMs}
-              progress={timer.progress}
+              endsAt={timer.endsAt}
               state={timer.state}
               visual={visual}
               windowSize={windowSize}
@@ -370,6 +375,16 @@ function ControllerView() {
           </Controller>
         </div>
       </div>
+
+      {confirmRequest && (
+        <ConfirmDialog
+          message={confirmRequest.message}
+          onAnswer={(v) => {
+            confirmRequest.resolve(v);
+            setConfirmRequest(null);
+          }}
+        />
+      )}
 
       <SettingsModal
         open={settingsOpen}
@@ -383,11 +398,11 @@ function ControllerView() {
 
 // --- STAGE VIEW (TRANSPARENT WITH GPU-ACCELERATED ANIMATION) ---
 function StageView() {
-  const [stageState, setStageState] = useState({
-    remainingMs: 0,
-    totalMs: 0,
-    progress: 1,
+  const [stageState, setStageState] = useState<StageState>({
     state: 'idle',
+    totalMs: 0,
+    remainingMs: 0,
+    endsAt: 0,
     visual: DEFAULT_VISUAL_SETTINGS,
     blackout: false,
   });
@@ -401,20 +416,10 @@ function StageView() {
   }, []);
 
   useEffect(() => {
-    if (window.electronAPI?.onUpdateStageState) {
-      const unsubscribe = window.electronAPI.onUpdateStageState((data: any) => {
-        setStageState(prev => ({
-          ...prev,
-          ...data,
-          visual: {
-            ...DEFAULT_VISUAL_SETTINGS,
-            ...prev.visual,
-            ...(data.visual || {})
-          }
-        }));
-      });
-      return () => unsubscribe();
-    }
+    if (!window.electronAPI?.onUpdateStageState) return;
+    return window.electronAPI.onUpdateStageState((data: Partial<StageState>) => {
+      setStageState((prev) => ({ ...prev, ...data, visual: mergeVisual(data.visual ?? prev.visual) }));
+    });
   }, []);
 
   const isActive = stageState.state === 'running' || stageState.state === 'paused' || stageState.state === 'complete';
@@ -423,6 +428,9 @@ function StageView() {
     ? { background: `linear-gradient(135deg, ${stageState.visual.background.color1}, ${stageState.visual.background.color2})` }
     : { background: stageState.visual?.background?.color1 || 'transparent' };
 
+  // Opacity + transform only: cheap to animate on a transparent always-on-top window.
+  const ease = [0.16, 1, 0.3, 1] as const;
+
   return (
     <div className="w-screen h-screen overflow-hidden flex items-center justify-center relative">
       <motion.div
@@ -430,24 +438,24 @@ function StageView() {
         style={bgStyle}
         initial={false}
         animate={{ opacity: isActive ? (stageState.visual?.background?.opacity ?? 1) : 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.5, ease }}
       />
 
       <AnimatePresence mode="wait">
         {isActive && (
           <motion.div
             key="stage-timer"
-            initial={{ opacity: 0, scale: 0.6, clipPath: 'circle(0% at 50% 50%)' }}
-            animate={{ opacity: 1, scale: 1, clipPath: 'circle(100% at 50% 50%)' }}
-            exit={{ opacity: 0, scale: 0.6, clipPath: 'circle(0% at 50% 50%)' }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="relative flex items-center justify-center p-8 rounded-full"
-            style={{ willChange: 'transform, opacity, clip-path' }}
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.92 }}
+            transition={{ duration: 0.5, ease }}
+            className="relative flex items-center justify-center p-8"
+            style={{ willChange: 'transform, opacity' }}
           >
             <TimerDisplay
               remainingMs={stageState.remainingMs}
               totalMs={stageState.totalMs}
-              progress={stageState.progress}
+              endsAt={stageState.endsAt}
               state={stageState.state}
               visual={stageState.visual}
               windowSize={windowSize}
@@ -457,16 +465,75 @@ function StageView() {
         )}
       </AnimatePresence>
 
-      {/* Black safety curtain — covers the reveal while M3's own window is
-          being reselected/restored after a countdown ends or is stopped,
-          so the handoff back to M3 never flashes or glitches. */}
+      {/* Black safety curtain while M3's window is being restored after a countdown ends or is stopped. */}
       <motion.div
         className="absolute inset-0 bg-black pointer-events-none"
         initial={false}
         animate={{ opacity: stageState.blackout ? 1 : 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.5, ease }}
         style={{ zIndex: 20 }}
       />
+    </div>
+  );
+}
+
+function M3StatusRow({
+  status,
+  busy,
+  onToggle,
+  onFlip,
+}: {
+  status: M3Status;
+  busy: boolean;
+  onToggle: () => void;
+  onFlip: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 bg-black/70 backdrop-blur border border-white/10 rounded-lg px-2 py-1.5 shadow-lg">
+      <span className="text-xs text-gray-300 flex-1 min-w-0 truncate" title={status.error}>
+        M³ media: <b className={status.hidden ? 'text-amber-400' : 'text-emerald-400'}>{status.hidden ? 'Hidden' : 'Shown'}</b>
+        {!status.ok && <span className="text-red-400"> · {status.error ?? 'could not reach M³'}</span>}
+      </span>
+      <button
+        onClick={onToggle}
+        disabled={busy}
+        title="Send M³'s hide/show shortcut now"
+        className="px-2 py-1 rounded text-xs font-semibold bg-white/10 text-white hover:bg-white/20 disabled:opacity-30"
+      >
+        Toggle
+      </button>
+      <button
+        onClick={onFlip}
+        disabled={busy}
+        title="Only fix this label (use if M³ was changed by hand); sends nothing"
+        className="px-2 py-1 rounded text-xs font-semibold bg-white/5 text-gray-300 hover:bg-white/10 disabled:opacity-30"
+      >
+        Fix label
+      </button>
+    </div>
+  );
+}
+
+function ConfirmDialog({ message, onAnswer }: { message: string; onAnswer: (value: boolean) => void }) {
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12121a] p-5 shadow-2xl">
+        <p className="whitespace-pre-line text-sm text-gray-200">{message}</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={() => onAnswer(false)}
+            className="px-3 py-1.5 rounded-md text-sm font-semibold bg-white/10 text-gray-200 hover:bg-white/20"
+          >
+            No, turn it off
+          </button>
+          <button
+            onClick={() => onAnswer(true)}
+            className="px-3 py-1.5 rounded-md text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-500"
+          >
+            Keep it on
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

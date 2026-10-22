@@ -70,3 +70,30 @@ export const FONT_OPTIONS = [
   "'Trebuchet MS', sans-serif",
   "'Verdana', sans-serif",
 ];
+
+/** Merges a saved (possibly partial or older) visual config over the defaults, section by section. */
+export function mergeVisual(saved: unknown): VisualSettings {
+  const src = saved && typeof saved === 'object' ? (saved as Record<string, unknown>) : {};
+  const out: Record<string, unknown> = {};
+  for (const [key, def] of Object.entries(DEFAULT_VISUAL_SETTINGS)) {
+    const val = src[key];
+    if (def && typeof def === 'object') {
+      out[key] = { ...def, ...(val && typeof val === 'object' ? val : {}) };
+    } else {
+      out[key] = typeof val === typeof def ? val : def;
+    }
+  }
+  return out as unknown as VisualSettings;
+}
+
+/** What the controller sends to the stage window. Times are absolute (Date.now) so the stage keeps its own clock. */
+export interface StageState {
+  state: TimerState;
+  totalMs: number;
+  /** Frozen remaining time (paused / idle / complete). */
+  remainingMs: number;
+  /** Epoch ms when a running countdown ends; 0 when not running. */
+  endsAt: number;
+  visual: VisualSettings;
+  blackout: boolean;
+}

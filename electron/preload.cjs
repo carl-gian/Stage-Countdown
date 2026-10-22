@@ -12,11 +12,16 @@ const api = {
     return () => ipcRenderer.removeListener('update-stage-state', handler);
   },
 
-  triggerShortcut: () => ipcRenderer.invoke('trigger-shortcut'),
+  // Start: creates the stage window on the saved display if it is not open.
+  openStageWindow: () => ipcRenderer.invoke('open-stage-window'),
 
-  // Steps 1+2 only, without touching the stage window — used by the
-  // end/stop sequences after the stage window has already been closed.
-  selectAndSignalM3: () => ipcRenderer.invoke('select-and-signal-m3'),
+  // M3 hide/show. All return { ok, hidden, error? }; "hidden" is what we BELIEVE
+  // M3's state is (its hotkey is a toggle and cannot be read back).
+  triggerShortcut: () => ipcRenderer.invoke('trigger-shortcut'), // hide M3 (no-op if already hidden)
+  selectAndSignalM3: () => ipcRenderer.invoke('select-and-signal-m3'), // restore M3 (no-op if shown)
+  toggleM3: () => ipcRenderer.invoke('toggle-m3'),
+  getM3State: () => ipcRenderer.invoke('get-m3-state'),
+  setM3State: (hidden) => ipcRenderer.invoke('set-m3-state', hidden),
 
   // Closes the stage window on the secondary display outright (step 5).
   closeStageWindow: () => ipcRenderer.invoke('close-stage-window'),

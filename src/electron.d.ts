@@ -6,16 +6,25 @@ interface DisplayInfo {
   primary: boolean;
 }
 
+interface M3Status {
+  ok: boolean;
+  hidden: boolean;
+  error?: string;
+}
+
 interface Window {
   electronAPI: {
     setAlwaysOnTop: (pinned: boolean) => Promise<boolean>;
     getDisplays: () => Promise<DisplayInfo[]>;
     moveToDisplay: (displayId: number | string) => Promise<boolean>;
     syncStateToStage: (state: unknown) => void;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onUpdateStageState: (callback: (data: any) => void) => () => void;
-    triggerShortcut: () => Promise<boolean>;
-    selectAndSignalM3: () => Promise<boolean>;
+    onUpdateStageState: (callback: (data: Partial<import('./types').StageState>) => void) => () => void;
+    openStageWindow: () => Promise<boolean>;
+    triggerShortcut: () => Promise<M3Status>;
+    selectAndSignalM3: () => Promise<M3Status>;
+    toggleM3: () => Promise<M3Status>;
+    getM3State: () => Promise<M3Status>;
+    setM3State: (hidden: boolean) => Promise<M3Status>;
     closeStageWindow: () => Promise<boolean>;
     closeApp: () => Promise<void>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
