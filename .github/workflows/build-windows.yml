@@ -1,10 +1,14 @@
-name: Build Windows installer
+name: Build Windows test build
 
+# Builds on every push to any branch, and by hand (Actions tab -> "Build Windows test build" -> Run workflow).
 on:
   push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch: # lets you press "Run workflow" by hand
+    branches: ['**']
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -20,8 +24,19 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build:win
+
+      # Portable: one .exe, no install - easiest for testing.
       - uses: actions/upload-artifact@v4
         with:
-          name: StageCountdown-Setup
-          path: release/*.exe
+          name: StageCountdown-Portable
+          path: release/*-Portable-*.exe
           if-no-files-found: error
+          retention-days: 14
+
+      # Installer: for testing the real install / Start-at-login behaviour.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StageCountdown-Installer
+          path: release/*-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 14

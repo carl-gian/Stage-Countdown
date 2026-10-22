@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "electron:dev": "vite build && electron .",
     "electron:start": "electron .",
-    "build:win": "vite build && electron-builder --win --x64 --publish never",
+    "build:win": "vite build && electron-builder --win nsis portable --x64 --publish never",
     "test": "vitest run",
     "release:win": "vite build && electron-builder --win --x64 --publish always"
   },
@@ -41,6 +41,9 @@
       "owner": "carl-gian",
       "repo": "Project-Stage-Countdown",
       "releaseType": "release"
+    },
+    "portable": {
+      "artifactName": "StageCountdown-Portable-${version}.${ext}"
     }
   },
   "dependencies": {
