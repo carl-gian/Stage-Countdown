@@ -1,4 +1,9 @@
+dist/
 node_modules/
 release/
 .DS_Store
 *.log
+
+# Reference material only - the Meeting Media Manager source is never uploaded
+OTHER APP SOURCE CODE/
+*.tsbuildinfo

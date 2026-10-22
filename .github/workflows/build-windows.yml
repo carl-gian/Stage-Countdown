@@ -1,0 +1,30 @@
+name: Build Windows installer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: # lets you press "Run workflow" by hand
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # Known baseline errors (see CLAUDE.md section 5): report, but don't block, until they are fixed.
+      - run: npm run typecheck
+        continue-on-error: true
+      - run: npm run lint
+        continue-on-error: true
+      - run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StageCountdown-Setup
+          path: release/*.exe
+          if-no-files-found: error

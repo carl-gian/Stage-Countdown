@@ -3,33 +3,13 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
-// --- CONFIG (Documents/Stage Countdown Settings/config.txt, JSON) ---
-const DEFAULT_SHORTCUT = { ctrl: false, alt: true, shift: true, code: 'F3' };
-const DEFAULT_CONFIG = {
-  lastDisplayId: null,
-  hideShortcut: DEFAULT_SHORTCUT,
-  visual: null,
-  startMinimized: false,
-  autoLaunch: false,
-  schedule: { enabled: false, time1: '', time2: '', durationMinutes: 5 },
-};
+const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey } = require('./logic.cjs');
 
+// --- CONFIG (Documents/Stage Countdown Settings/config.txt, JSON) ---
 let configCache = null;
 
 function configPath() {
   return path.join(app.getPath('documents'), 'Stage Countdown Settings', 'config.txt');
-}
-
-function isPlainObject(v) {
-  return v && typeof v === 'object' && !Array.isArray(v);
-}
-
-function deepMerge(base, patch) {
-  const out = { ...base };
-  for (const [k, v] of Object.entries(patch || {})) {
-    out[k] = isPlainObject(v) && isPlainObject(base?.[k]) ? deepMerge(base[k], v) : v;
-  }
-  return out;
 }
 
 function loadConfig() {
@@ -65,12 +45,9 @@ let lastFiredKey = null;
 function startScheduler() {
   setInterval(() => {
     const { schedule } = loadConfig();
-    if (!schedule?.enabled || !controllerWindow || controllerWindow.isDestroyed()) return;
-    const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    if (hhmm !== schedule.time1 && hhmm !== schedule.time2) return;
-    const key = `${now.toDateString()} ${hhmm}`;
-    if (key === lastFiredKey) return;
+    if (!controllerWindow || controllerWindow.isDestroyed()) return;
+    const key = scheduleDueKey(schedule, new Date());
+    if (!key || key === lastFiredKey) return;
     lastFiredKey = key;
     controllerWindow.webContents.send('scheduled-start', { durationMinutes: schedule.durationMinutes ?? 5 });
   }, 5000);
@@ -138,23 +115,7 @@ function selectM3Window() {
 
 // 2. TRIGGER SHORTCUT (Instant)
 function triggerShortcut(shortcut) {
-  // Configured shortcut logic, defaulting to Alt+Shift+Y
-  shortcut = shortcut || loadConfig().hideShortcut || DEFAULT_SHORTCUT;
-  let vkCode = 0x72; // F3
-  let hasAlt = true;
-  let hasShift = true;
-  let hasCtrl = false;
-
-  if (shortcut) {
-    hasAlt = !!shortcut.alt;
-    hasShift = !!shortcut.shift;
-    hasCtrl = !!shortcut.ctrl;
-    if (shortcut.code) {
-      if (shortcut.code.startsWith('Key')) vkCode = shortcut.code.charCodeAt(3);
-      else if (shortcut.code.startsWith('Digit')) vkCode = shortcut.code.charCodeAt(5);
-      else if (/^F([1-9]|1[0-2])$/.test(shortcut.code)) vkCode = 0x70 + Number(shortcut.code.slice(1)) - 1;
-    }
-  }
+  const { vkCode, hasAlt, hasShift, hasCtrl } = shortcutToKeys(shortcut || loadConfig().hideShortcut);
 
   const psCommand = `
     Add-Type -TypeDefinition @"
