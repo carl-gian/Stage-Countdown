@@ -77,6 +77,29 @@ function ControllerView() {
 
   const busy = phase !== null;
 
+  // Optional OBS scene switching (Settings > OBS Scene Switching). Never blocks or fails a sequence.
+  const [obsStatus, setObsStatus] = useState<ObsStatus | null>(null);
+  const [obsNote, setObsNote] = useState('');
+  const obsMediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    window.electronAPI?.obsGetStatus?.().then(setObsStatus).catch(() => {});
+    return window.electronAPI?.onObsStatus?.(setObsStatus);
+  }, []);
+
+  /** Fire-and-forget: OBS problems are shown in the OBS row, never stop the countdown. */
+  const obsSwitch = useCallback((kind: 'media' | 'camera', fadeMs: number) => {
+    window.electronAPI
+      ?.obsSwitch?.(kind, fadeMs)
+      .then((r) => setObsNote(r.ok || r.skipped ? '' : (r.error ?? 'OBS scene switch failed')))
+      .catch(() => {});
+  }, []);
+
+  const cancelPendingObsMedia = useCallback(() => {
+    if (obsMediaTimerRef.current) clearTimeout(obsMediaTimerRef.current);
+    obsMediaTimerRef.current = null;
+  }, []);
+
   const askConfirm = useCallback(
     (message: string) => new Promise<boolean>((resolve) => setConfirmRequest({ message, resolve })),
     []
@@ -190,12 +213,19 @@ function ControllerView() {
 
         timer.start(Math.max(1000, durationAt(Date.now())));
         setPreroll(null);
+
+        // OBS (optional): shortly after counting starts, fade Zoom's view to the Media Display scene.
+        cancelPendingObsMedia();
+        obsMediaTimerRef.current = setTimeout(() => {
+          obsMediaTimerRef.current = null;
+          obsSwitch('media', SEQUENCE.obs.mediaFadeMs);
+        }, SEQUENCE.obs.mediaDelayAfterStartMs);
       } finally {
         busyRef.current = false;
         setPhase(null);
       }
     },
-    [timer, pendingCloseReconfirm, askConfirm, applyM3]
+    [timer, pendingCloseReconfirm, askConfirm, applyM3, obsSwitch, cancelPendingObsMedia]
   );
 
   const settingsMs = timer.settings.minutes * 60_000 + timer.settings.seconds * 1000;
@@ -259,6 +289,9 @@ function ControllerView() {
       let shortcutAt = 0;
       try {
         setPhase({ kind: 'ending', until: Date.now() + e.holdZeroMs });
+        // OBS (optional): Zoom fades back to the Camera scene as the timer ends, while the room still sees 00:00.
+        cancelPendingObsMedia();
+        setTimeout(() => obsSwitch('camera', SEQUENCE.obs.cameraFadeMs), SEQUENCE.obs.cameraDelayAfterEndMs);
         await skippableDelay(e.holdZeroMs);
         setPhase({ kind: 'returning' });
         shortcutAt = await handBackToM3(e.fadeToBlackMs, e.closeAfterShortcutMs);
@@ -268,7 +301,7 @@ function ControllerView() {
       }
       if (closeAfter) setQuitAt(shortcutAt + e.quitAfterShortcutMs);
     },
-    [handBackToM3, skippableDelay]
+    [handBackToM3, skippableDelay, obsSwitch, cancelPendingObsMedia]
   );
 
   const prevTimerState = useRef(timer.state);
@@ -308,6 +341,8 @@ function ControllerView() {
     busyRef.current = true;
     try {
       setPhase({ kind: 'stopping' });
+      cancelPendingObsMedia();
+      obsSwitch('camera', SEQUENCE.obs.cameraFadeMs);
       if (autoClose) setPendingCloseReconfirm(true);
       timer.stop();
       setStageShowsTimer(false); // timer fades out while the curtain fades in
@@ -318,7 +353,7 @@ function ControllerView() {
       busyRef.current = false;
       setPhase(null);
     }
-  }, [timer, autoClose, handBackToM3]);
+  }, [timer, autoClose, handBackToM3, obsSwitch, cancelPendingObsMedia]);
 
   const handleSetNewTime = useCallback(() => {
     // After a finished countdown the stage is already closed and M3 is back: just reset.
@@ -412,6 +447,7 @@ function ControllerView() {
           <AutoCloseButton autoClose={autoClose} quitAt={quitAt} onClick={handleAutoCloseButton} />
 
           <M3StatusRow status={m3} busy={busy} onToggle={handleToggleM3} onFlip={handleFlipM3Label} />
+          {obsStatus?.enabled && <ObsStatusRow status={obsStatus} note={obsNote} />}
         </div>
 
         <div className="flex-1 min-h-0">
@@ -588,6 +624,41 @@ function AutoCloseButton({ autoClose, quitAt, onClick }: { autoClose: boolean; q
     >
       {autoClose ? '✓ WILL CLOSE AFTER TIMER ENDS' : 'Close StageCountdown after Timer ends'}
     </button>
+  );
+}
+
+const OBS_DOT: Record<ObsStatus['state'], string> = {
+  off: 'text-gray-500',
+  searching: 'text-amber-400',
+  connecting: 'text-amber-400',
+  connected: 'text-emerald-400',
+  'auth-failed': 'text-red-400',
+  error: 'text-red-400',
+};
+
+function ObsStatusRow({ status, note }: { status: ObsStatus; note: string }) {
+  const ready = status.state === 'connected' && status.mediaScene && status.cameraScene;
+  const text =
+    status.state === 'connected'
+      ? ready
+        ? `Connected · ${status.cameraScene} ⇄ ${status.mediaScene}`
+        : 'Connected · choose the scenes in Settings'
+      : status.state === 'auth-failed'
+        ? 'Wrong WebSocket password'
+        : status.state === 'error'
+          ? 'Could not talk to OBS'
+          : 'Looking for OBS…';
+  return (
+    <div
+      className="flex items-center gap-2 bg-black/70 backdrop-blur border border-white/10 rounded-lg px-2 py-1.5 shadow-lg text-xs text-gray-300"
+      title={note || status.error}
+    >
+      <span className={OBS_DOT[status.state]}>●</span>
+      <span className="flex-1 min-w-0 truncate">
+        OBS: {text}
+        {note && <span className="text-red-400"> · {note}</span>}
+      </span>
+    </div>
   );
 }
 

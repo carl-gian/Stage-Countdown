@@ -25,3 +25,13 @@ Automated tests cannot cover the M³ hand-off, so run this on the real PC after 
 - [ ] Pause then Restart: restarts immediately without hiding/showing M³ again.
 - [ ] Settings: colour / ring / glow / shadow / font-size changes show identically in the Settings preview, the controller and the stage.
 - [ ] Settings > Startup & Schedule: change a schedule option after changing a colour, restart the app: both are kept.
+
+## OBS scene switching (optional)
+In OBS: Tools -> WebSocket Server Settings -> enable (note port and password). Make a Media Display scene (shows the stage display) and a Camera scene.
+- [ ] Settings > OBS Scene Switching: turn it on with OBS closed: "OBS not detected". Open OBS: it turns to "Connected" by itself within a few seconds and the scenes appear.
+- [ ] Wrong password: "OBS found, but the password is wrong". Correct it: connects. Close and reopen the app: the password is remembered (the box shows "saved", never the password).
+- [ ] Choose the two scenes. Start a countdown: ~1 s after it starts counting OBS fades (1.2 s) to Media Display; Zoom sees the timer.
+- [ ] When the timer ends OBS fades (2 s) back to the Camera scene while the room still sees 00:00.
+- [ ] Stop mid-count: OBS returns to the Camera scene. Close the app mid-count: OBS returns to the Camera scene.
+- [ ] Studio Mode ON in OBS: it still switches correctly. Your own transition type and Fade duration in OBS are unchanged afterwards.
+- [ ] Quit OBS mid-countdown: the countdown carries on; the "OBS:" row shows it is looking again; nothing crashes.

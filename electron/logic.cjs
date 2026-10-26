@@ -10,6 +10,9 @@ const DEFAULT_CONFIG = {
   startMinimized: false,
   autoLaunch: false,
   schedule: { enabled: false, time1: '', time2: '', durationMinutes: 5 },
+  // Optional OBS scene switching. The WebSocket password is NOT here: see obsPasswordEnc.
+  obs: { enabled: false, port: 4455, mediaScene: '', cameraScene: '' },
+  obsPasswordEnc: '',
 };
 
 function isPlainObject(v) {
@@ -47,4 +50,36 @@ function scheduleDueKey(schedule, now) {
   return `${now.toDateString()} ${hhmm}`;
 }
 
-module.exports = { DEFAULT_SHORTCUT, DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey };
+/** Picks the transition to use for our fades: "Fade", else any fade kind, else the first non-cut one. */
+function chooseFadeTransition(transitions) {
+  const list = Array.isArray(transitions) ? transitions : [];
+  return (
+    list.find((t) => String(t.transitionName).toLowerCase() === 'fade') ||
+    list.find((t) => t.transitionKind === 'fade_transition') ||
+    list.find((t) => !t.transitionFixed) ||
+    null
+  );
+}
+
+/** Obscures/unobscures a secret for the config file. `encrypt` is Electron's safeStorage (or null). */
+function sealSecret(value, encrypt) {
+  if (!value) return '';
+  if (encrypt) return `enc:${encrypt.encryptString(value).toString('base64')}`;
+  return `raw:${Buffer.from(value, 'utf8').toString('base64')}`;
+}
+
+function openSecret(sealed, decrypt) {
+  if (!sealed) return '';
+  try {
+    if (sealed.startsWith('enc:')) return decrypt ? decrypt.decryptString(Buffer.from(sealed.slice(4), 'base64')) : '';
+    if (sealed.startsWith('raw:')) return Buffer.from(sealed.slice(4), 'base64').toString('utf8');
+  } catch {
+    // unreadable (e.g. config copied to another PC): treat as no password
+  }
+  return '';
+}
+
+module.exports = {
+  chooseFadeTransition,
+  sealSecret,
+  openSecret, DEFAULT_SHORTCUT, DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey };

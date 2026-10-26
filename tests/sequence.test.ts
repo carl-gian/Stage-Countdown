@@ -22,6 +22,15 @@ describe('M3 hand-off timings', () => {
     });
   });
 
+  it('OBS: media 1000 ms after counting starts with a 1200 ms fade; camera at the end with a 2000 ms fade', () => {
+    expect(SEQUENCE.obs).toEqual({
+      mediaDelayAfterStartMs: 1000,
+      mediaFadeMs: 1200,
+      cameraDelayAfterEndMs: 0,
+      cameraFadeMs: 2000,
+    });
+  });
+
   it('stop mirrors the end without the hold', () => {
     expect(SEQUENCE.stop.fadeToBlackMs).toBe(SEQUENCE.end.fadeToBlackMs);
     expect(SEQUENCE.stop.closeAfterShortcutMs).toBe(SEQUENCE.end.closeAfterShortcutMs);

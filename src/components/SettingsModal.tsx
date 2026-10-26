@@ -1,10 +1,11 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Monitor, Palette, Circle, Type, Clock, Keyboard, CalendarClock, type LucideIcon } from 'lucide-react';
+import { X, Monitor, Palette, Circle, Type, Clock, Keyboard, CalendarClock, Video, type LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { VisualSettings } from '@/types';
 import { FONT_OPTIONS } from '@/types';
 import TimerDisplay, { DEFAULT_FONT_SIZE } from '@/components/TimerDisplay';
 import ScheduleSettings from '@/components/ScheduleSettings';
+import ObsSettings from '@/components/ObsSettings';
 
 interface SettingsModalProps {
   open: boolean;
@@ -407,6 +408,12 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
                   <SliderInput label="Font Size" value={visual.text.fontSize} min={24} max={60} format={(v) => `${Math.round((v / DEFAULT_FONT_SIZE) * 100)}%`} onChange={(v) => update({ text: { ...visual.text, fontSize: v } })} />
                   <SliderInput label="Shadow" value={visual.text.shadowIntensity} min={0} max={50} onChange={(v) => update({ text: { ...visual.text, shadowIntensity: v } })} />
                 </div>
+              </div>
+
+              {/* OBS Scene Switching */}
+              <div>
+                <SectionTitle icon={Video} title="OBS Scene Switching" />
+                <ObsSettings />
               </div>
 
               {/* Startup & Schedule */}

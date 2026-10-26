@@ -23,6 +23,17 @@ const api = {
   getM3State: () => ipcRenderer.invoke('get-m3-state'),
   setM3State: (hidden) => ipcRenderer.invoke('set-m3-state', hidden),
 
+  // Optional OBS scene switching (all OBS access lives in electron/obs.cjs).
+  obsGetStatus: () => ipcRenderer.invoke('obs-get-status'),
+  obsSaveSettings: (settings) => ipcRenderer.invoke('obs-save-settings', settings),
+  obsRefresh: () => ipcRenderer.invoke('obs-refresh'),
+  obsSwitch: (kind, fadeMs) => ipcRenderer.invoke('obs-switch', kind, fadeMs),
+  onObsStatus: (callback) => {
+    const handler = (_event, status) => callback(status);
+    ipcRenderer.on('obs-status', handler);
+    return () => ipcRenderer.removeListener('obs-status', handler);
+  },
+
   // Closes the stage window on the secondary display outright (step 5).
   closeStageWindow: () => ipcRenderer.invoke('close-stage-window'),
 

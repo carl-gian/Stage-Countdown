@@ -40,6 +40,7 @@ if you change one on purpose (owner's request only), update the test too.
 | Start (manual / scheduled / Countdown to Time) | stage window opened invisibly → **shortcut** (hide M³) → +500 ms stage goes black (300 ms fade) → black for 1000 ms → 1000 ms transition to the timer showing the full time → 2000 ms → counting starts (4.5 s after the shortcut) |
 | Complete | 00:00 held **10 s** (heartbeat at the start; "Back to M³ now" skips) → 500 ms fade to black → **shortcut** (show M³) → 500 ms → stage window closed (M³'s media window is already on top of it) |
 | Auto-close | if "Close StageCountdown after Timer ends" is on: the app quits **5 s after the end shortcut**; the button shows "Closing in Ns · click to cancel" |
+| OBS (optional) | counting starts → +1000 ms → OBS fades to the Media Display scene (1200 ms); timer ends → OBS fades to the Camera scene (2000 ms) while the room still sees the 00:00 hold; Stop cancels a pending media switch and goes to Camera |
 | Stop | timer fades out with 500 ms fade to black → **shortcut** → 500 ms → stage window closed (never quits) |
 | Restart while paused | restarts in place (stage already up, M³ already hidden) — no sequence |
 
@@ -53,10 +54,25 @@ false`, so it keeps running when minimized. The stage gets `{state, totalMs, rem
 something changes and paints its own ring/digits straight to the DOM (no React renders while running). A new stage window is
 replayed the last state on load.
 
+## 2b. OBS scene switching (optional, off by default)
+
+`electron/obs.cjs` talks obs-websocket v5 on `ws://127.0.0.1:<port>` (JSON protocol, `obs-websocket-js/json`). Purpose: OBS feeds
+Zoom, so participants see the timer (Media Display scene) and then the camera again, with no manual switching.
+- Settings > OBS Scene Switching: enable, port (4455), password, pick the two scenes. The app retries every 4 s while OBS isn't
+  running ("detects" the server); a wrong password stops retrying until settings change.
+- The password is sealed with Electron `safeStorage` in `config.txt` (`obsPasswordEnc`) and is never sent to the renderer
+  (`get-config` strips it; `set-config` ignores it; only `obs-save-settings` writes it).
+- Switching uses the "Fade" transition with the requested duration, handles Studio Mode (preview + Transition), skips if OBS is
+  already on that scene, then restores the operator's own transition AND the Fade's own duration (OBS keeps one duration per
+  transition). Calls are queued so two switches never interleave. Closing the app while on the media scene sends OBS back to Camera.
+- OBS problems never stop a countdown: they show in the "OBS:" row of the controller. Timings: `SEQUENCE.obs` (pinned by tests).
+- `tests/obs.test.ts` runs the module against a fake OBS server; run real-OBS checks from `docs/TEST-CHECKLIST.md`.
+
 ## 3. Code map
 
 ```
 electron/main.cjs      windows, IPC handlers, PowerShell (focus + hotkey), config file, scheduler, login item
+electron/obs.cjs       optional OBS WebSocket scene switching (no Electron imports)
 electron/logic.cjs     PURE helpers (deepMerge, shortcutToKeys, scheduleDueKey) — unit tested
 electron/preload.cjs   the window.electronAPI bridge (typed in src/electron.d.ts)
 src/App.tsx            sequences, controller/stage routing (?view=stage)

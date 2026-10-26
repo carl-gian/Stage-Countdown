@@ -5,6 +5,7 @@
 // END    00:00 holds 10000 -> 500 fade to black -> shortcut (show M3; M3's media window opens ON TOP of
 //        our black window) -> 500 -> stage window closed behind it -> app quits 5000 after the shortcut
 //        if "Close StageCountdown after timer ends" is on (countdown shown on that button, click to cancel)
+// OBS    (optional) see SEQUENCE.obs below
 // STOP   same as END without the 00:00 hold, and never quits.
 export const SEQUENCE = {
   start: {
@@ -19,6 +20,15 @@ export const SEQUENCE = {
     fadeToBlackMs: 500,
     closeAfterShortcutMs: 500,
     quitAfterShortcutMs: 5000,
+  },
+  // Optional OBS scene switching (Settings > OBS Scene Switching) so Zoom participants see the timer.
+  // Media: 1000 ms after the countdown starts, fade to the Media Display scene over 1200 ms.
+  // Camera: the moment the countdown ends, fade back to the Camera scene over 2000 ms.
+  obs: {
+    mediaDelayAfterStartMs: 1000,
+    mediaFadeMs: 1200,
+    cameraDelayAfterEndMs: 0,
+    cameraFadeMs: 2000,
   },
   stop: {
     fadeToBlackMs: 500,

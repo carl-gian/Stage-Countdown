@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, safeStorage } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
-const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey } = require('./logic.cjs');
+const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, sealSecret, openSecret } = require('./logic.cjs');
+const { createObs } = require('./obs.cjs');
 
 let controllerWindow = null;
 let stageWindow = null;
@@ -53,6 +54,21 @@ function saveConfig(patch) {
 function applyLoginItem() {
   const { autoLaunch } = loadConfig();
   app.setLoginItemSettings({ openAtLogin: !!autoLaunch, args: autoLaunch ? ['--hidden'] : [] });
+}
+
+// --- OBS (optional scene switching; see electron/obs.cjs) ---------------------
+const secretBox = () => (safeStorage && safeStorage.isEncryptionAvailable() ? safeStorage : null);
+
+const obs = createObs({
+  log: (...a) => console.log(...a),
+  onStatus: (status) => {
+    if (controllerWindow && !controllerWindow.isDestroyed()) controllerWindow.webContents.send('obs-status', status);
+  },
+});
+
+function applyObsConfig(force = false) {
+  const cfg = loadConfig();
+  obs.configure({ ...cfg.obs, password: openSecret(cfg.obsPasswordEnc, secretBox()) }, { force });
 }
 
 // --- SCHEDULER: fires 'scheduled-start' at time1 / time2 ---
@@ -302,10 +318,13 @@ function createWindow() {
 
   // Never leave M3's media hidden: if we hid it, bring it back before closing.
   controllerWindow.on('close', (event) => {
-    if (m3Hidden && !closingRestore) {
+    if (closingRestore) return;
+    // Also put OBS back on the camera scene if we left it on the media scene.
+    const obsBack = obs.restoreCameraIfNeeded();
+    if (m3Hidden || obs.status().state === 'connected') {
       event.preventDefault();
       closingRestore = true;
-      setM3Hidden(false).finally(() => {
+      Promise.all([m3Hidden ? setM3Hidden(false) : null, obsBack]).finally(() => {
         if (controllerWindow && !controllerWindow.isDestroyed()) controllerWindow.close();
       });
     }
@@ -386,6 +405,7 @@ app.whenReady().then(() => {
     controllerWindow.once('ready-to-show', () => controllerWindow.minimize());
   }
   startScheduler();
+  applyObsConfig();
   if (process.platform === 'win32') ensurePs(); // compile the helper now, not on the first Start
 
   app.on('activate', () => {
@@ -398,6 +418,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  obs.dispose();
   try {
     psChild?.kill();
   } catch {
@@ -448,13 +469,49 @@ ipcMain.handle('set-m3-state', (_event, hidden) => {
   return m3Result(true);
 });
 
-ipcMain.handle('get-config', () => loadConfig());
+// The renderer never receives (or sets) the sealed OBS password through the generic config calls.
+const publicConfig = () => {
+  const { obsPasswordEnc, ...rest } = loadConfig();
+  return { ...rest, obs: { ...rest.obs, hasPassword: !!obsPasswordEnc } };
+};
+
+ipcMain.handle('get-config', () => publicConfig());
 
 ipcMain.handle('set-config', (_event, patch) => {
-  const next = saveConfig(patch);
+  const { obsPasswordEnc: _ignored, obs: _obs, ...safe } = patch || {};
+  const next = saveConfig(safe);
   if (patch && 'autoLaunch' in patch) applyLoginItem();
-  return next;
+  return publicConfig();
 });
+
+// --- OBS IPC ---
+ipcMain.handle('obs-get-status', () => obs.status());
+
+// settings: { enabled, port, password? (omit to keep the saved one, '' to clear), mediaScene, cameraScene }
+ipcMain.handle('obs-save-settings', (_event, settings) => {
+  const port = Number(settings?.port);
+  const patch = {
+    obs: {
+      enabled: !!settings?.enabled,
+      port: Number.isInteger(port) && port >= 1 && port <= 65535 ? port : 4455,
+      mediaScene: String(settings?.mediaScene ?? ''),
+      cameraScene: String(settings?.cameraScene ?? ''),
+    },
+  };
+  if (typeof settings?.password === 'string') patch.obsPasswordEnc = sealSecret(settings.password, secretBox());
+  saveConfig(patch);
+  applyObsConfig();
+  return obs.status();
+});
+
+ipcMain.handle('obs-refresh', () => {
+  applyObsConfig(true);
+  return obs.status();
+});
+
+ipcMain.handle('obs-switch', (_event, kind, fadeMs) =>
+  obs.switchTo(kind === 'media' ? 'media' : 'camera', Math.max(0, Math.min(10_000, Number(fadeMs) || 0)))
+);
 
 ipcMain.handle('close-stage-window', () => {
   if (stageWindow && !stageWindow.isDestroyed()) {
