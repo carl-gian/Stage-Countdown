@@ -1,0 +1,42 @@
+name: Build Windows test build
+
+# Builds on every push to any branch, and by hand (Actions tab -> "Build Windows test build" -> Run workflow).
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build:win
+
+      # Portable: one .exe, no install - easiest for testing.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StageCountdown-Portable
+          path: release/*-Portable-*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      # Installer: for testing the real install / Start-at-login behaviour.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StageCountdown-Installer
+          path: release/*-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 14

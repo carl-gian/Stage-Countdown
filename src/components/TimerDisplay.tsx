@@ -1,157 +1,131 @@
-import { useEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import { type VisualSettings } from '@/types';
+import { formatCountdown } from '@/lib/time';
 
 interface TimerDisplayProps {
+  /** Frozen remaining time, used when the countdown is not running. */
   remainingMs: number;
   totalMs: number;
-  progress: number;
+  /** Epoch ms when a running countdown ends; 0 when not running. */
+  endsAt: number;
   state: string;
   visual: VisualSettings;
   windowSize: { width: number; height: number };
   hideStatus?: boolean;
 }
 
+/** Ring size (px) on a 1080p display: 60% of 1080. */
+const REFERENCE_RING_PX = 648;
+/** The Font Size setting is relative to this (48 = 100%). */
+export const DEFAULT_FONT_SIZE = 48;
+
 export default function TimerDisplay({
   remainingMs,
   totalMs,
-  progress,
+  endsAt,
   state,
   visual,
   windowSize,
-  hideStatus = false
+  hideStatus = false,
 }: TimerDisplayProps) {
-  // --- Smoothing -------------------------------------------------------
-  // remainingMs/progress only change whenever the parent's tick fires
-  // (often just once a second). Animating the ring with a short
-  // framer-motion tween on every tick looked choppy: each tick restarted
-  // a brand-new 100ms tween, so the ring moved in little bursts and then
-  // sat still until the next update, instead of gliding.
-  //
-  // Instead, we keep a small requestAnimationFrame loop that extrapolates
-  // "where the ring should be right now" from real elapsed time since the
-  // last tick. That runs at the display's actual refresh rate and is
-  // completely decoupled from how coarse the upstream updates are.
-  const snapshotRef = useRef({ ts: performance.now(), remainingMs, progress });
-  const isElapsedStyleRef = useRef(false); // does `progress` grow or shrink as time passes?
-  const rafRef = useRef<number | undefined>(undefined);
-  const [renderedMs, setRenderedMs] = useState(remainingMs);
-  const [renderedProgress, setRenderedProgress] = useState(progress);
+  const size = Math.min(windowSize.width, windowSize.height) * 0.6;
+  // Pixel settings are defined at the 1080p stage ring and scale with the ring, so the controller
+  // preview, the Settings preview and the stage all look the same.
+  const k = size / REFERENCE_RING_PX;
+  const ringThickness = (visual?.progressRing?.thickness || 10) * k;
+  const trackThickness = (visual?.trackRing?.thickness || 2) * k;
+  const radius = (size - Math.max(ringThickness, trackThickness)) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const gradientId = `ring-${useId().replace(/:/g, '')}`;
+  const textScale = Math.min(1.25, Math.max(0.5, (visual?.text?.fontSize || DEFAULT_FONT_SIZE) / DEFAULT_FONT_SIZE));
 
-  // Re-anchor every time a fresh value arrives from the timer, and figure
-  // out (from ground truth remainingMs/totalMs) which direction `progress`
-  // moves, so we can extrapolate it correctly without assuming its
-  // convention up front.
-  useEffect(() => {
-    const total = totalMs > 0 ? totalMs : 1;
-    const remainingFraction = Math.min(1, Math.max(0, remainingMs / total));
-    const diffAsRemaining = Math.abs(progress - remainingFraction);
-    const diffAsElapsed = Math.abs(progress - (1 - remainingFraction));
-    isElapsedStyleRef.current = diffAsElapsed < diffAsRemaining;
+  const textRef = useRef<HTMLSpanElement>(null);
+  const ringRef = useRef<SVGCircleElement>(null);
 
-    snapshotRef.current = { ts: performance.now(), remainingMs, progress };
-    setRenderedMs(remainingMs);
-    setRenderedProgress(progress);
-  }, [remainingMs, totalMs, progress]);
+  // The digits and ring are painted straight to the DOM from one requestAnimationFrame loop that
+  // reads the clock, so a running countdown causes no React renders at all. When it is not running
+  // the frozen value is painted once.
+  useLayoutEffect(() => {
+    const paint = (ms: number) => {
+      const left = Math.max(0, ms);
+      if (textRef.current) textRef.current.textContent = formatCountdown(left);
+      const elapsed = totalMs > 0 ? Math.min(1, Math.max(0, 1 - left / totalMs)) : 0;
+      if (ringRef.current) ringRef.current.style.strokeDashoffset = String(circumference * (1 - elapsed));
+    };
 
-  useEffect(() => {
-    if (state !== 'running') {
-      if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
-      setRenderedMs(remainingMs);
-      setRenderedProgress(progress);
+    if (state !== 'running' || !endsAt) {
+      paint(remainingMs);
       return;
     }
-
-    const total = totalMs > 0 ? totalMs : 1;
-
-    const tick = () => {
-      const elapsed = performance.now() - snapshotRef.current.ts;
-      const nextMs = Math.max(0, snapshotRef.current.remainingMs - elapsed);
-      const remainingFraction = Math.min(1, Math.max(0, nextMs / total));
-      const nextProgress = isElapsedStyleRef.current ? 1 - remainingFraction : remainingFraction;
-
-      setRenderedMs(nextMs);
-      setRenderedProgress(nextProgress);
-      rafRef.current = requestAnimationFrame(tick);
+    let raf = 0;
+    const frame = () => {
+      paint(endsAt - Date.now());
+      raf = requestAnimationFrame(frame);
     };
-    rafRef.current = requestAnimationFrame(tick);
+    frame();
+    return () => cancelAnimationFrame(raf);
+  }, [state, endsAt, totalMs, remainingMs, circumference]);
 
-    return () => {
-      if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, totalMs]);
-
-  const minutes = Math.floor(renderedMs / 60000);
-  const seconds = Math.floor((renderedMs % 60000) / 1000);
-  const timeFormatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-
-  const size = Math.min(windowSize.width, windowSize.height) * 0.6;
-  const strokeWidth = visual?.progressRing?.thickness || 10;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const strokeDashoffset = circumference - renderedProgress * circumference;
+  const progress = visual?.progressRing;
+  const track = visual?.trackRing;
+  const textColor = visual?.text?.color || '#ffffff';
+  const shadow = visual?.text?.shadowIntensity ?? 0;
 
   return (
-    <div className="relative flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="transform -rotate-90 drop-shadow-2xl">
+    <div
+      className={`relative flex flex-col items-center justify-center${state === 'complete' ? ' stage-heartbeat' : ''}`}
+      style={{ width: size, height: size }}
+    >
+      <svg width={size} height={size} className="transform -rotate-90">
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke={visual?.staticRing?.color || 'rgba(255,255,255,0.2)'}
-          strokeWidth={visual?.staticRing?.thickness || 2}
-          opacity={visual?.staticRing?.opacity ?? 1}
+          stroke={track?.color || 'rgba(255,255,255,0.2)'}
+          strokeWidth={trackThickness}
         />
-        {/* Driven directly by the rAF loop above every frame — no
-            framer-motion tween competing with it, so there's nothing to
-            restart or "catch up" on each tick. */}
         <circle
+          ref={ringRef}
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke="url(#gradient)"
-          strokeWidth={visual?.progressRing?.thickness || 10}
+          stroke={progress?.gradient === false ? progress?.color1 || '#fff' : `url(#${gradientId})`}
+          strokeWidth={ringThickness}
           strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
-          style={{ filter: `drop-shadow(0 0 ${visual?.progressRing?.glow || 0}px ${visual?.progressRing?.color1 || '#fff'})` }}
+          style={{
+            filter: progress?.glow
+              ? `drop-shadow(0 0 ${(progress.glowIntensity ?? 20) * k}px ${progress.color1 || '#fff'})`
+              : 'none',
+          }}
         />
         <defs>
-          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={visual?.progressRing?.color1 || '#ffffff'} />
-            <stop offset="100%" stopColor={visual?.progressRing?.color2 || '#ffffff'} />
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={progress?.color1 || '#ffffff'} />
+            <stop offset="100%" stopColor={progress?.color2 || '#ffffff'} />
           </linearGradient>
         </defs>
       </svg>
 
       <div
         className="absolute flex flex-col items-center justify-center text-center"
-        style={{ color: visual?.text?.color || '#ffffff', fontFamily: visual?.text?.fontFamily || 'sans-serif' }}
+        style={{ color: textColor, fontFamily: visual?.text?.fontFamily || 'sans-serif' }}
       >
+        {/* Tabular figures keep every digit the same width so the centred clock doesn't jitter. */}
         <span
+          ref={textRef}
           style={{
-            fontSize: size * 0.25,
+            fontSize: size * 0.25 * textScale,
             fontWeight: 'bold',
-            textShadow: `0px 4px ${visual?.text?.shadow || 0}px rgba(0,0,0,0.5)`,
+            textShadow: shadow > 0 ? `0 0 ${shadow * k}px ${textColor}80` : 'none',
             lineHeight: 1,
-            // Most fonts' proportional digits are different widths (a '1'
-            // is narrower than an '8'), so as the seconds tick over the
-            // string's total width keeps changing — and since this span is
-            // centered, that reads as the whole clock jittering side to
-            // side every second instead of just the digits updating in
-            // place. Tabular figures give every digit the same advance
-            // width so the string length — and its centered position —
-            // stays fixed.
             fontVariantNumeric: 'tabular-nums',
             fontFeatureSettings: '"tnum" 1, "lnum" 1',
           }}
-        >
-          {timeFormatted}
-        </span>
+        />
 
-        {/* This completely removes the status text (e.g. "Running") when on the Stage View */}
         {!hideStatus && (
           <span
             className="uppercase tracking-widest mt-2 opacity-60 font-semibold"

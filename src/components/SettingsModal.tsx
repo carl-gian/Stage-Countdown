@@ -1,12 +1,19 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Monitor, Palette, Circle, Type, Clock, Keyboard, type LucideIcon } from 'lucide-react';
+import { X, Monitor, Palette, Circle, Type, Clock, Keyboard, CalendarClock, Video, Info, type LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { VisualSettings } from '@/types';
 import { FONT_OPTIONS } from '@/types';
+import TimerDisplay, { DEFAULT_FONT_SIZE } from '@/components/TimerDisplay';
+import ScheduleSettings from '@/components/ScheduleSettings';
+import ObsSettings from '@/components/ObsSettings';
 
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
+  /** Called after the M³ on/off switch changes so the controller can refresh its status row. */
+  onM3EnabledChange?: () => void;
+  onOpenHelp?: (topic: string) => void;
+  onShowWhatsNew?: () => void;
   visual: VisualSettings;
   onChange: (v: VisualSettings) => void;
 }
@@ -158,6 +165,7 @@ function SliderInput({
   max,
   step = 1,
   unit = '',
+  format,
   onChange,
 }: {
   label: string;
@@ -166,6 +174,7 @@ function SliderInput({
   max: number;
   step?: number;
   unit?: string;
+  format?: (v: number) => string;
   onChange: (v: number) => void;
 }) {
   return (
@@ -180,69 +189,40 @@ function SliderInput({
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="flex-1 accent-emerald-400 h-1"
       />
-      <span className="text-xs font-mono text-gray-300 w-12 text-right">{value}{unit}</span>
+      <span className="text-xs font-mono text-gray-300 w-12 text-right">{format ? format(value) : `${value}${unit}`}</span>
     </div>
   );
 }
 
+// The real stage component, frozen at 3:15 of 5:00, so the preview always matches the stage.
 function MiniPreview({ visual }: { visual: VisualSettings }) {
-  const size = 120;
-  const radius = size / 2 - 14;
-  const circumference = 2 * Math.PI * radius;
-  const progress = 0.65;
-  const dashOffset = circumference * (1 - progress);
-
+  const box = 168;
+  const bg = visual.background.mode === 'gradient'
+    ? `linear-gradient(135deg, ${visual.background.color1}, ${visual.background.color2})`
+    : visual.background.color1;
   return (
-    <div
-      className="flex items-center justify-center rounded-xl"
-      style={{
-        width: size + 24,
-        height: size + 24,
-        background: visual.background.mode === 'gradient'
-          ? `linear-gradient(135deg, ${visual.background.color1}, ${visual.background.color2})`
-          : visual.background.color1,
-        opacity: visual.background.opacity,
-      }}
-    >
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <defs>
-          <linearGradient id="preview-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={visual.progressRing.color1} />
-            <stop offset="100%" stopColor={visual.progressRing.color2} />
-          </linearGradient>
-        </defs>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={visual.trackRing.color} strokeWidth={visual.trackRing.thickness / 2} opacity={0.5} />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={visual.progressRing.gradient ? 'url(#preview-grad)' : visual.progressRing.color1}
-          strokeWidth={visual.progressRing.thickness / 2}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-        />
-      </svg>
-      <span
-        className="absolute font-bold tabular-nums"
-        style={{
-          fontFamily: visual.text.fontFamily,
-          color: visual.text.color,
-          fontSize: '14px',
-          textShadow: visual.text.shadowIntensity > 0 ? `0 0 ${visual.text.shadowIntensity / 2}px ${visual.text.color}80` : 'none',
-        }}
-      >
-        03:15
-      </span>
+    <div className="relative flex items-center justify-center rounded-xl overflow-hidden border border-white/10" style={{ width: box, height: box }}>
+      <div className="absolute inset-0" style={{ background: bg, opacity: visual.background.opacity }} />
+      <TimerDisplay
+        remainingMs={195_000}
+        totalMs={300_000}
+        endsAt={0}
+        state="idle"
+        visual={visual}
+        windowSize={{ width: box / 0.6 * 0.9, height: box / 0.6 * 0.9 }}
+        hideStatus
+      />
     </div>
   );
 }
 
-export default function SettingsModal({ open, onClose, visual, onChange }: SettingsModalProps) {
+export default function SettingsModal({ open, onClose, visual, onChange, onM3EnabledChange, onOpenHelp, onShowWhatsNew }: SettingsModalProps) {
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
   const [selectedDisplayId, setSelectedDisplayId] = useState<string>('');
   const [hideShortcut, setHideShortcut] = useState<ShortcutValue>(DEFAULT_SHORTCUT);
+  const [m3Enabled, setM3Enabled] = useState(true);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -250,11 +230,17 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
       window.electronAPI.getDisplays().then(setDisplays).catch(() => setDisplays([]));
     }
     if (window.electronAPI?.getConfig) {
-      window.electronAPI.getConfig().then((config: any) => {
+      window.electronAPI.getConfig().then((config: { lastDisplayId?: number | string | null; hideShortcut?: Partial<ShortcutValue>; m3?: { enabled?: boolean } } | null) => {
         if (config?.lastDisplayId != null) setSelectedDisplayId(String(config.lastDisplayId));
         if (config?.hideShortcut) setHideShortcut({ ...DEFAULT_SHORTCUT, ...config.hideShortcut });
+        setM3Enabled(config?.m3?.enabled !== false);
       }).catch(() => {});
     }
+    window.electronAPI?.getAppInfo?.().then((i) => {
+      setAppInfo(i);
+      setUpdateInfo(i.update);
+    });
+    return window.electronAPI?.onUpdateStatus?.(setUpdateInfo);
   }, [open]);
 
   const update = (patch: Partial<VisualSettings>) => onChange({ ...visual, ...patch });
@@ -264,6 +250,11 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
     if (window.electronAPI?.moveToDisplay) {
       window.electronAPI.moveToDisplay(id);
     }
+  };
+
+  const updateM3Enabled = (enabled: boolean) => {
+    setM3Enabled(enabled);
+    Promise.resolve(window.electronAPI?.setConfig?.({ m3: { enabled } })).then(() => onM3EnabledChange?.());
   };
 
   const updateShortcut = (shortcut: ShortcutValue) => {
@@ -318,6 +309,7 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
                     onChange={(e) => moveToDisplay(e.target.value)}
                     className="w-full bg-white/5 text-gray-200 text-sm rounded-lg px-3 py-2 border border-white/10 outline-none"
                   >
+                    <option value="" className="bg-[#12121a]">Automatic (first display that isn't this one)</option>
                     {displays.map((d) => (
                       <option key={d.id} value={String(d.id)} className="bg-[#12121a]">
                         {d.label}{d.primary ? ' (Primary)' : ''} — {d.bounds.width}×{d.bounds.height}
@@ -330,17 +322,33 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
                   </div>
                 )}
                 <p className="text-[11px] text-gray-500 mt-1.5">
-                  Defaults to the first non-primary display on launch — pick a different one here if needed.
+                  Where the countdown appears. Automatic picks a display other than the one this controller is on.
                 </p>
               </div>
 
-              {/* Hide/Show Shortcut */}
+              {/* Meeting Media Manager */}
               <div>
-                <SectionTitle icon={Keyboard} title="Hide/Show Shortcut" />
-                <ShortcutRecorder value={hideShortcut} onChange={updateShortcut} />
-                <p className="text-[11px] text-gray-500 mt-1.5">
-                  Sent to the meeting media manager to hide/show its Yeartext window before and after each countdown.
+                <SectionTitle icon={Keyboard} title="Meeting Media Manager (M³)" />
+                <p className="text-[11px] leading-relaxed text-gray-400 mb-2.5">
+                  If you use M³, the countdown hides its media window while it runs and gives it back afterwards, by sending M³'s
+                  "Media Window" shortcut. Turn this off to use Stage Countdown on its own: nothing is hidden and no shortcut is sent.
                 </p>
+                <label className="flex items-center justify-between gap-4 cursor-pointer mb-3">
+                  <span className="text-sm font-semibold text-gray-200">Control M³'s media window</span>
+                  <input
+                    type="checkbox"
+                    checked={m3Enabled}
+                    onChange={(e) => updateM3Enabled(e.target.checked)}
+                    className="w-5 h-5 accent-emerald-500 shrink-0"
+                  />
+                </label>
+                <div className={`transition-opacity ${m3Enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                  <ShortcutRecorder value={hideShortcut} onChange={updateShortcut} />
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    Must be the same as the "Media Window" shortcut in M³ (M³ Settings → Interface &amp; Shortcuts → turn on keyboard shortcuts).
+                    <button onClick={() => onOpenHelp?.('m3')} className="ml-1 text-emerald-400 hover:underline">How to set it up</button>
+                  </p>
+                </div>
               </div>
 
               {/* Background */}
@@ -431,9 +439,21 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
                     </select>
                   </div>
                   <ColorInput label="Text Color" value={visual.text.color} onChange={(v) => update({ text: { ...visual.text, color: v } })} />
-                  <SliderInput label="Font Size" value={visual.text.fontSize} min={20} max={96} unit="px" onChange={(v) => update({ text: { ...visual.text, fontSize: v } })} />
+                  <SliderInput label="Font Size" value={visual.text.fontSize} min={24} max={60} format={(v) => `${Math.round((v / DEFAULT_FONT_SIZE) * 100)}%`} onChange={(v) => update({ text: { ...visual.text, fontSize: v } })} />
                   <SliderInput label="Shadow" value={visual.text.shadowIntensity} min={0} max={50} onChange={(v) => update({ text: { ...visual.text, shadowIntensity: v } })} />
                 </div>
+              </div>
+
+              {/* OBS Scene Switching */}
+              <div>
+                <SectionTitle icon={Video} title="OBS Scene Switching" />
+                <ObsSettings />
+              </div>
+
+              {/* Startup & Schedule */}
+              <div>
+                <SectionTitle icon={CalendarClock} title="Startup & Schedule" />
+                <ScheduleSettings />
               </div>
 
               {/* Clock Format */}
@@ -455,6 +475,46 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
                       12h
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* About & updates */}
+              <div>
+                <SectionTitle icon={Info} title="About & updates" />
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-gray-300">Stage Countdown {appInfo ? appInfo.version : ''}</span>
+                    <span className={`text-xs ${updateInfo?.status === 'ready' ? 'text-blue-300' : 'text-gray-500'}`}>
+                      {updateInfo?.status === 'ready' ? `Update ${updateInfo.version} ready`
+                        : updateInfo?.status === 'downloading' ? `Downloading update ${updateInfo.version} (${updateInfo.percent}%)`
+                        : updateInfo?.status === 'checking' ? 'Checking…'
+                        : updateInfo?.status === 'up-to-date' ? 'Up to date'
+                        : updateInfo?.status === 'error' ? 'Could not check'
+                        : updateInfo?.status === 'disabled' ? (updateInfo.reason === 'portable' ? 'Portable: no auto-update' : 'Updates off (dev run)')
+                        : ''}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => (updateInfo?.status === 'ready' ? window.electronAPI?.updateInstall?.() : window.electronAPI?.updateCheck?.())}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20"
+                    >
+                      {updateInfo?.status === 'ready' ? 'Restart and update…' : 'Check for updates'}
+                    </button>
+                    <button onClick={onShowWhatsNew} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20">
+                      What's new
+                    </button>
+                    <button onClick={() => onOpenHelp?.('start')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20">
+                      Help
+                    </button>
+                    <button onClick={() => window.electronAPI?.openLogs?.()} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20">
+                      Open logs folder
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    The app checks for a new version every time it starts and downloads it quietly. It is never installed in the middle of a meeting
+                    without you choosing it (the blue "Update ready" badge, the tray menu) — or it installs when you quit.
+                  </p>
                 </div>
               </div>
             </div>

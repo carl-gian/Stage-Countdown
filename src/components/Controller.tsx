@@ -8,8 +8,10 @@ import {
   Pin,
   PinOff,
   Settings,
+  HelpCircle,
   Plus,
   Minus,
+  SkipForward,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -28,6 +30,7 @@ interface ControllerProps {
   onRestart: () => void;
   onSetNewTime: () => void;
   onOpenSettings: () => void;
+  onOpenHelp: () => void;
   pinned: boolean;
   onTogglePin: () => void;
   visual: VisualSettings;
@@ -35,26 +38,70 @@ interface ControllerProps {
   /** When true, freezes the minute/second steppers (e.g. a "countdown to
    * time" target is staged) even though the timer is otherwise idle/editable. */
   disableTimeInputs?: boolean;
-  /** True during the ~2s gap between the shortcut firing and the timer
-   * actually starting/restarting. Gives the badge + controls something to
-   * show during that window instead of sitting frozen and then jumping
-   * straight to "Running". */
-  starting?: boolean;
+  /** A start/end/stop sequence in progress (controls are replaced by its status). */
+  phase?: Phase;
+  /** Ends the current hold early (only offered while 00:00 is held after a countdown). */
+  onSkipPhase?: () => void;
 }
 
-function StatusBadge({ state, starting }: { state: TimerState; starting?: boolean }) {
+export type Phase = {
+  kind: 'starting' | 'ending' | 'returning' | 'stopping';
+  /** Epoch ms the phase ends, for a live "in Ns" countdown. */
+  until?: number;
+} | null;
+
+const PHASE_BADGE: Record<NonNullable<Phase>['kind'], string> = {
+  starting: 'Starting…',
+  ending: "Time's up",
+  returning: 'Showing M³…',
+  stopping: 'Stopping…',
+};
+
+function useSecondsLeft(until?: number) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!until) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [until]);
+  return until ? Math.max(0, Math.ceil((until - now) / 1000)) : null;
+}
+
+function PhaseStatus({ phase, onSkip }: { phase: NonNullable<Phase>; onSkip?: () => void }) {
+  const secs = useSecondsLeft(phase.until);
+  const text = {
+    starting: secs !== null ? `Hiding M³ · counting starts in ${secs}s` : 'Hiding M³…',
+    ending: secs !== null ? `Holding 00:00 · back to M³ in ${secs}s` : 'Holding 00:00…',
+    returning: 'Bringing M³ back…',
+    stopping: 'Stopping · bringing M³ back…',
+  }[phase.kind];
+  return (
+    <div className="flex items-center justify-center gap-2 flex-wrap">
+      <motion.div
+        animate={{ opacity: [1, 0.55, 1] }}
+        transition={{ duration: 1.2, repeat: Infinity }}
+        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-[#2a2a3d] text-gray-200 tabular-nums"
+      >
+        <Clock size={16} />
+        {text}
+      </motion.div>
+      {phase.kind === 'ending' && onSkip && (
+        <ControlButton icon={SkipForward} label="Back to M³ now" onClick={onSkip} variant="secondary" />
+      )}
+    </div>
+  );
+}
+
+function StatusBadge({ state, phase }: { state: TimerState; phase?: Phase }) {
   const config: Record<TimerState, { label: string; color: string; bg: string }> = {
     idle: { label: 'Idle', color: '#6b7280', bg: 'rgba(107,114,128,0.15)' },
     running: { label: 'Running', color: '#00d4aa', bg: 'rgba(0,212,170,0.15)' },
     paused: { label: 'Paused', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
     complete: { label: 'Complete', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
   };
-  // "Starting" isn't part of the underlying timer state machine (the timer
-  // itself is still idle/complete for the ~2s the shortcut needs to run) —
-  // it's purely a UI overlay so the badge doesn't sit frozen and then jump
-  // straight to "Running" with no warning.
-  const { label, color, bg } = starting
-    ? { label: 'Starting…', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' }
+  // A sequence in progress overrides the timer state so the badge never sits frozen.
+  const { label, color, bg } = phase
+    ? { label: PHASE_BADGE[phase.kind], color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' }
     : config[state];
   return (
     <motion.div
@@ -67,8 +114,8 @@ function StatusBadge({ state, starting }: { state: TimerState; starting?: boolea
       <motion.span
         className="w-1.5 h-1.5 rounded-full"
         style={{ backgroundColor: color }}
-        animate={{ opacity: state === 'running' || starting ? [1, 0.3, 1] : 1 }}
-        transition={{ duration: starting ? 0.6 : 1.2, repeat: Infinity }}
+        animate={{ opacity: state === 'running' || phase ? [1, 0.3, 1] : 1 }}
+        transition={{ duration: phase ? 0.6 : 1.2, repeat: Infinity }}
       />
       {label}
     </motion.div>
@@ -165,13 +212,16 @@ export default function Controller({
   onRestart,
   onSetNewTime,
   onOpenSettings,
+  onOpenHelp,
   pinned,
   onTogglePin,
   visual,
   children,
   disableTimeInputs = false,
-  starting = false,
+  phase = null,
+  onSkipPhase,
 }: ControllerProps) {
+  const inSequence = phase !== null;
   const [clockTime, setClockTime] = useState('');
 
   useEffect(() => {
@@ -210,7 +260,7 @@ export default function Controller({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge state={state} starting={starting} />
+          <StatusBadge state={state} phase={phase} />
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -223,6 +273,16 @@ export default function Controller({
             ) : (
               <PinOff size={16} className="text-gray-500" />
             )}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onOpenHelp}
+            className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+            title="Help (F1)"
+            aria-label="Help"
+          >
+            <HelpCircle size={16} className="text-gray-400 hover:text-white transition-colors" />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }}
@@ -247,7 +307,7 @@ export default function Controller({
           >
             <div
               className={`flex items-center justify-center gap-6 transition-opacity ${
-                disableTimeInputs || starting ? 'opacity-40' : 'opacity-100'
+                disableTimeInputs || inSequence ? 'opacity-40' : 'opacity-100'
               }`}
             >
               <TimeInput
@@ -255,7 +315,7 @@ export default function Controller({
                 value={minutes}
                 max={99}
                 onChange={onMinutesChange}
-                disabled={!canEdit || disableTimeInputs || starting}
+                disabled={!canEdit || disableTimeInputs || inSequence}
               />
               <span className="text-3xl font-bold text-gray-600 -mt-4">:</span>
               <TimeInput
@@ -263,14 +323,10 @@ export default function Controller({
                 value={seconds}
                 max={59}
                 onChange={onSecondsChange}
-                disabled={!canEdit || disableTimeInputs || starting}
+                disabled={!canEdit || disableTimeInputs || inSequence}
               />
             </div>
-            {starting ? (
-              <span className="text-[10px] uppercase tracking-widest text-amber-400/80 font-semibold">
-                Hiding display…
-              </span>
-            ) : (
+            {!inSequence && (
               disableTimeInputs && (
                 <span className="text-[10px] uppercase tracking-widest text-emerald-500/80 font-semibold">
                   Locked — target time set
@@ -289,22 +345,14 @@ export default function Controller({
       {/* Control buttons */}
       <div className="px-5 py-4 border-t border-white/5">
         <AnimatePresence mode="wait">
-          {starting ? (
+          {phase ? (
             <motion.div
-              key="starting-controls"
+              key={`phase-${phase.kind}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="flex justify-center"
             >
-              <motion.div
-                animate={{ opacity: [1, 0.5, 1] }}
-                transition={{ duration: 0.8, repeat: Infinity }}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-[#2a2a3d] text-gray-300"
-              >
-                <Clock size={16} />
-                Starting…
-              </motion.div>
+              <PhaseStatus phase={phase} onSkip={onSkipPhase} />
             </motion.div>
           ) : state === 'idle' && (
             <motion.div
@@ -318,7 +366,7 @@ export default function Controller({
             </motion.div>
           )}
 
-          {!starting && state === 'running' && (
+          {!inSequence && state === 'running' && (
             <motion.div
               key="running-controls"
               initial={{ opacity: 0, y: 10 }}
@@ -331,7 +379,7 @@ export default function Controller({
             </motion.div>
           )}
 
-          {!starting && state === 'paused' && (
+          {!inSequence && state === 'paused' && (
             <motion.div
               key="paused-controls"
               initial={{ opacity: 0, y: 10 }}
@@ -345,7 +393,7 @@ export default function Controller({
             </motion.div>
           )}
 
-          {!starting && state === 'complete' && (
+          {!inSequence && state === 'complete' && (
             <motion.div
               key="complete-controls"
               initial={{ opacity: 0, y: 10 }}
