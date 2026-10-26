@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import { type VisualSettings } from '@/types';
 import { formatCountdown } from '@/lib/time';
 
@@ -14,6 +14,11 @@ interface TimerDisplayProps {
   hideStatus?: boolean;
 }
 
+/** Ring size (px) on a 1080p display: 60% of 1080. */
+const REFERENCE_RING_PX = 648;
+/** The Font Size setting is relative to this (48 = 100%). */
+export const DEFAULT_FONT_SIZE = 48;
+
 export default function TimerDisplay({
   remainingMs,
   totalMs,
@@ -24,9 +29,15 @@ export default function TimerDisplay({
   hideStatus = false,
 }: TimerDisplayProps) {
   const size = Math.min(windowSize.width, windowSize.height) * 0.6;
-  const ringThickness = visual?.progressRing?.thickness || 10;
-  const radius = (size - ringThickness) / 2;
+  // Pixel settings are defined at the 1080p stage ring and scale with the ring, so the controller
+  // preview, the Settings preview and the stage all look the same.
+  const k = size / REFERENCE_RING_PX;
+  const ringThickness = (visual?.progressRing?.thickness || 10) * k;
+  const trackThickness = (visual?.trackRing?.thickness || 2) * k;
+  const radius = (size - Math.max(ringThickness, trackThickness)) / 2;
   const circumference = radius * 2 * Math.PI;
+  const gradientId = `ring-${useId().replace(/:/g, '')}`;
+  const textScale = Math.min(1.25, Math.max(0.5, (visual?.text?.fontSize || DEFAULT_FONT_SIZE) / DEFAULT_FONT_SIZE));
 
   const textRef = useRef<HTMLSpanElement>(null);
   const ringRef = useRef<SVGCircleElement>(null);
@@ -72,7 +83,7 @@ export default function TimerDisplay({
           r={radius}
           fill="transparent"
           stroke={track?.color || 'rgba(255,255,255,0.2)'}
-          strokeWidth={track?.thickness || 2}
+          strokeWidth={trackThickness}
         />
         <circle
           ref={ringRef}
@@ -80,18 +91,18 @@ export default function TimerDisplay({
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke={progress?.gradient === false ? progress?.color1 || '#fff' : 'url(#gradient)'}
+          stroke={progress?.gradient === false ? progress?.color1 || '#fff' : `url(#${gradientId})`}
           strokeWidth={ringThickness}
           strokeDasharray={circumference}
           strokeLinecap="round"
           style={{
             filter: progress?.glow
-              ? `drop-shadow(0 0 ${progress.glowIntensity ?? 20}px ${progress.color1 || '#fff'})`
+              ? `drop-shadow(0 0 ${(progress.glowIntensity ?? 20) * k}px ${progress.color1 || '#fff'})`
               : 'none',
           }}
         />
         <defs>
-          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor={progress?.color1 || '#ffffff'} />
             <stop offset="100%" stopColor={progress?.color2 || '#ffffff'} />
           </linearGradient>
@@ -106,9 +117,9 @@ export default function TimerDisplay({
         <span
           ref={textRef}
           style={{
-            fontSize: size * 0.25,
+            fontSize: size * 0.25 * textScale,
             fontWeight: 'bold',
-            textShadow: shadow > 0 ? `0 0 ${shadow}px ${textColor}80` : 'none',
+            textShadow: shadow > 0 ? `0 0 ${shadow * k}px ${textColor}80` : 'none',
             lineHeight: 1,
             fontVariantNumeric: 'tabular-nums',
             fontFeatureSettings: '"tnum" 1, "lnum" 1',

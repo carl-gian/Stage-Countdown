@@ -88,6 +88,8 @@ export function mergeVisual(saved: unknown): VisualSettings {
 
 /** What the controller sends to the stage window. Times are absolute (Date.now) so the stage keeps its own clock. */
 export interface StageState {
+  /** Whether the timer (and its background) is on screen at all. */
+  show: boolean;
   state: TimerState;
   totalMs: number;
   /** Frozen remaining time (paused / idle / complete). */
@@ -95,5 +97,7 @@ export interface StageState {
   /** Epoch ms when a running countdown ends; 0 when not running. */
   endsAt: number;
   visual: VisualSettings;
+  /** Black curtain over everything, and how long its fade takes. */
   blackout: boolean;
+  curtainMs: number;
 }

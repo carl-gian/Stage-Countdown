@@ -30,16 +30,23 @@ M³'s hotkey is a **toggle that cannot be read back**, so main tracks `m3Hidden`
 shown; end/stop only restore if it believes M³ is hidden. The controller shows "M³ media: Shown/Hidden" with **Toggle** (send the
 hotkey) and **Fix label** (correct the belief without sending anything). Closing the controller while M³ is hidden restores it first.
 
-## 2. Sequences (src/App.tsx) — timing was tuned on a live rig
+## 2. Sequences (src/App.tsx) — owner-specified timings, all in `src/lib/sequence.ts`
 
-All three run under one lock (`busyRef`), so two M³ toggles can never overlap.
+All run under one lock (`busyRef`), so two M³ toggles can never overlap. `tests/sequence.test.ts` pins the values:
+if you change one on purpose (owner's request only), update the test too.
 
 | Event | Steps |
 |---|---|
-| Start (manual or scheduled) | open stage window on saved display → focus M³ + hide (≈0.7 s) → wait 500 ms → timer starts |
-| Start via "Countdown to Time" | same, but the duration is computed AFTER the sequence so the countdown ends exactly on the target |
-| Complete | heartbeat 1400 ms → fade stage to black 500 ms → close stage window → restore M³ → optional quit |
-| Stop | stop timer → fade 500 ms → close stage window → restore M³ (never quits) |
+| Start (manual / scheduled / Countdown to Time) | stage window opened invisibly → **shortcut** (hide M³) → +500 ms stage goes black (300 ms fade) → black for 1000 ms → 1000 ms transition to the timer showing the full time → 2000 ms → counting starts (4.5 s after the shortcut) |
+| Complete | 00:00 held **10 s** (heartbeat at the start; "Back to M³ now" skips) → 500 ms fade to black → **shortcut** (show M³) → 500 ms → stage window closed (M³'s media window is already on top of it) |
+| Auto-close | if "Close StageCountdown after Timer ends" is on: the app quits **5 s after the end shortcut**; the button shows "Closing in Ns · click to cancel" |
+| Stop | timer fades out with 500 ms fade to black → **shortcut** → 500 ms → stage window closed (never quits) |
+| Restart while paused | restarts in place (stage already up, M³ already hidden) — no sequence |
+
+"Countdown to Time" is sized when counting actually begins, so it still ends exactly on the target.
+Stacking: our stage window is always-on-top at the default "floating" level; M³'s fullscreen media window uses
+"screen-saver", which is higher — that is why M³ appears over our black window at the end. The stage window is
+non-focusable, ignores the mouse and is not in the taskbar.
 
 The clock is wall-time (`endsAt = Date.now() + ms`) driven by timers, not rAF, and both windows have `backgroundThrottling:
 false`, so it keeps running when minimized. The stage gets `{state, totalMs, remainingMs, endsAt, visual, blackout}` only when

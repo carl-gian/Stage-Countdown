@@ -16,3 +16,12 @@ Automated tests cannot cover the M³ hand-off, so run this on the real PC after 
 - [ ] "Countdown to Time": pick a time 3 min ahead, wait 1 min, press Start: it ends exactly at that time.
 - [ ] Press Start during the end sequence: nothing happens (no double toggle). "Toggle" / "Fix label" fix a desynced M³.
 - [ ] Timer end: two heartbeat pulses, fade to black, M³ back. Glow, track ring and text shadow settings show on the stage.
+
+## Sequence timing (2026-10-27)
+- [ ] Start: M³ hides; ~0.5 s later the stage display goes black; ~1 s later the timer fades in showing the full time; ~2 s later it starts counting.
+- [ ] End: 00:00 stays 10 s ("Back to M³ now" skips it) -> fades to black -> M³'s media comes back ON TOP of the black screen -> no flash when our window closes behind it.
+- [ ] With "Close StageCountdown after timer ends" on: the button counts "Closing in 5s…" and the app quits; clicking the button during the count cancels it.
+- [ ] The stage display never takes keyboard focus and clicks on that display reach M³ while no countdown is running.
+- [ ] Pause then Restart: restarts immediately without hiding/showing M³ again.
+- [ ] Settings: colour / ring / glow / shadow / font-size changes show identically in the Settings preview, the controller and the stage.
+- [ ] Settings > Startup & Schedule: change a schedule option after changing a colour, restart the app: both are kept.

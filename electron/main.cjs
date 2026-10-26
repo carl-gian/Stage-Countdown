@@ -247,7 +247,7 @@ async function sendM3Hotkey() {
   await delay(200);
   const k = shortcutToKeys(cfg.hideShortcut);
   const key = await psSend(`key|${k.vkCode}|${+k.hasAlt}|${+k.hasShift}|${+k.hasCtrl}`);
-  await delay(500);
+  // Returns as soon as the key is sent: every wait after it lives in src/lib/sequence.ts.
   if (key !== 'OK') {
     console.error('[m3] hotkey failed:', key);
     return `Could not send the shortcut (${key})`;
@@ -329,8 +329,11 @@ function pickStageDisplay() {
   return displays.find((d) => d.id !== controllerDisplay.id) || controllerDisplay;
 }
 
+// Resolves once the stage page has loaded, so the first state sent to it is not lost.
+let stageLoaded = null;
+
 function launchStageWindow(target) {
-  if (!target) return;
+  if (!target) return Promise.resolve();
   const { x, y, width, height } = target.bounds;
 
   if (!stageWindow || stageWindow.isDestroyed()) {
@@ -340,26 +343,40 @@ function launchStageWindow(target) {
       fullscreen: true,
       transparent: true,
       hasShadow: false,
+      // Never steals focus (M3 must keep it for the shortcut) and never appears in the taskbar.
+      show: false,
+      focusable: false,
+      skipTaskbar: true,
       alwaysOnTop: true,
       title: 'StageCountdown - Display',
       backgroundColor: undefined,
       icon: path.join(__dirname, '..', 'build', 'icon.ico'),
       webPreferences: webPreferences(),
     });
+    // Default "floating" level: M3's media window uses the higher "screen-saver" level, so when M3
+    // is shown again it appears on top of our (black) window and we close ours behind it.
+    stageWindow.setAlwaysOnTop(true, 'floating');
+    // Purely a display: clicks go through to whatever is underneath.
+    stageWindow.setIgnoreMouseEvents(true);
 
-    stageWindow.loadURL(getWindowUrl('stage'));
-    stageWindow.webContents.on('did-finish-load', () => {
-      if (lastStageState && stageWindow && !stageWindow.isDestroyed()) {
-        stageWindow.webContents.send('update-stage-state', lastStageState);
-      }
+    const win = stageWindow;
+    stageLoaded = new Promise((resolve) => {
+      win.webContents.once('did-finish-load', () => {
+        if (lastStageState && !win.isDestroyed()) win.webContents.send('update-stage-state', lastStageState);
+        if (!win.isDestroyed()) win.showInactive();
+        resolve();
+      });
+      setTimeout(resolve, 5000); // never block Start on a slow load
     });
-    stageWindow.on('closed', () => {
-      stageWindow = null;
+    win.loadURL(getWindowUrl('stage'));
+    win.on('closed', () => {
+      if (stageWindow === win) stageWindow = null;
     });
   } else {
     stageWindow.setBounds({ x, y, width, height });
     stageWindow.setFullscreen(true);
   }
+  return stageLoaded || Promise.resolve();
 }
 
 app.whenReady().then(() => {
@@ -407,20 +424,16 @@ ipcMain.handle('get-displays', () => {
   }));
 });
 
+// Saves the choice (null = automatic); moves the stage window only if one is open.
 ipcMain.handle('move-to-display', (_event, displayId) => {
-  saveConfig({ lastDisplayId: displayId });
-  launchStageWindow(screen.getAllDisplays().find((d) => String(d.id) === String(displayId)));
+  saveConfig({ lastDisplayId: displayId || null });
+  if (stageWindow && !stageWindow.isDestroyed()) launchStageWindow(pickStageDisplay());
   return true;
 });
 
-// Start: make sure the stage window exists on the saved display.
-ipcMain.handle('open-stage-window', () => {
-  launchStageWindow(pickStageDisplay());
-  return true;
-});
-
-ipcMain.handle('reassert-stage-window', () => {
-  launchStageWindow(pickStageDisplay());
+// Start: make sure the stage window exists on the saved display and has loaded.
+ipcMain.handle('open-stage-window', async () => {
+  await launchStageWindow(pickStageDisplay());
   return true;
 });
 

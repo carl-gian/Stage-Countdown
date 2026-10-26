@@ -20,10 +20,8 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
 };
 
 /**
- * Drop this into SettingsModal.tsx as its own section/tab. It owns its own
- * load/save round-trip to main.cjs (get-app-settings / set-app-settings) so
- * it can be embedded without SettingsModal needing to know anything about
- * its internals.
+ * The "Startup & Schedule" section of SettingsModal. Owns its own load/save round-trip
+ * (getAppSettings / setAppSettings, the same config file) and only ever writes its own keys.
  */
 export default function ScheduleSettings() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
@@ -33,7 +31,12 @@ export default function ScheduleSettings() {
     (async () => {
       if (window.electronAPI?.getAppSettings) {
         const saved = await window.electronAPI.getAppSettings();
-        setSettings({ ...DEFAULT_APP_SETTINGS, ...saved, schedule: { ...DEFAULT_APP_SETTINGS.schedule, ...(saved?.schedule || {}) } });
+        // Keep only this panel's keys: the config file also holds colours etc. that other code owns.
+        setSettings({
+          startMinimized: saved?.startMinimized ?? DEFAULT_APP_SETTINGS.startMinimized,
+          autoLaunch: saved?.autoLaunch ?? DEFAULT_APP_SETTINGS.autoLaunch,
+          schedule: { ...DEFAULT_APP_SETTINGS.schedule, ...(saved?.schedule || {}) },
+        });
       }
       setLoaded(true);
     })();
@@ -46,7 +49,8 @@ export default function ScheduleSettings() {
   const commit = (next: AppSettings) => {
     setSettings(next);
     if (window.electronAPI?.setAppSettings) {
-      window.electronAPI.setAppSettings(next);
+      const { startMinimized, autoLaunch, schedule } = next;
+      window.electronAPI.setAppSettings({ startMinimized, autoLaunch, schedule });
     }
   };
 

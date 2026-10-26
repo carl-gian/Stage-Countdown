@@ -1,8 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Monitor, Palette, Circle, Type, Clock, Keyboard, type LucideIcon } from 'lucide-react';
+import { X, Monitor, Palette, Circle, Type, Clock, Keyboard, CalendarClock, type LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { VisualSettings } from '@/types';
 import { FONT_OPTIONS } from '@/types';
+import TimerDisplay, { DEFAULT_FONT_SIZE } from '@/components/TimerDisplay';
+import ScheduleSettings from '@/components/ScheduleSettings';
 
 interface SettingsModalProps {
   open: boolean;
@@ -158,6 +160,7 @@ function SliderInput({
   max,
   step = 1,
   unit = '',
+  format,
   onChange,
 }: {
   label: string;
@@ -166,6 +169,7 @@ function SliderInput({
   max: number;
   step?: number;
   unit?: string;
+  format?: (v: number) => string;
   onChange: (v: number) => void;
 }) {
   return (
@@ -180,61 +184,29 @@ function SliderInput({
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="flex-1 accent-emerald-400 h-1"
       />
-      <span className="text-xs font-mono text-gray-300 w-12 text-right">{value}{unit}</span>
+      <span className="text-xs font-mono text-gray-300 w-12 text-right">{format ? format(value) : `${value}${unit}`}</span>
     </div>
   );
 }
 
+// The real stage component, frozen at 3:15 of 5:00, so the preview always matches the stage.
 function MiniPreview({ visual }: { visual: VisualSettings }) {
-  const size = 120;
-  const radius = size / 2 - 14;
-  const circumference = 2 * Math.PI * radius;
-  const progress = 0.65;
-  const dashOffset = circumference * (1 - progress);
-
+  const box = 168;
+  const bg = visual.background.mode === 'gradient'
+    ? `linear-gradient(135deg, ${visual.background.color1}, ${visual.background.color2})`
+    : visual.background.color1;
   return (
-    <div
-      className="flex items-center justify-center rounded-xl"
-      style={{
-        width: size + 24,
-        height: size + 24,
-        background: visual.background.mode === 'gradient'
-          ? `linear-gradient(135deg, ${visual.background.color1}, ${visual.background.color2})`
-          : visual.background.color1,
-        opacity: visual.background.opacity,
-      }}
-    >
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <defs>
-          <linearGradient id="preview-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={visual.progressRing.color1} />
-            <stop offset="100%" stopColor={visual.progressRing.color2} />
-          </linearGradient>
-        </defs>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={visual.trackRing.color} strokeWidth={visual.trackRing.thickness / 2} opacity={0.5} />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={visual.progressRing.gradient ? 'url(#preview-grad)' : visual.progressRing.color1}
-          strokeWidth={visual.progressRing.thickness / 2}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-        />
-      </svg>
-      <span
-        className="absolute font-bold tabular-nums"
-        style={{
-          fontFamily: visual.text.fontFamily,
-          color: visual.text.color,
-          fontSize: '14px',
-          textShadow: visual.text.shadowIntensity > 0 ? `0 0 ${visual.text.shadowIntensity / 2}px ${visual.text.color}80` : 'none',
-        }}
-      >
-        03:15
-      </span>
+    <div className="relative flex items-center justify-center rounded-xl overflow-hidden border border-white/10" style={{ width: box, height: box }}>
+      <div className="absolute inset-0" style={{ background: bg, opacity: visual.background.opacity }} />
+      <TimerDisplay
+        remainingMs={195_000}
+        totalMs={300_000}
+        endsAt={0}
+        state="idle"
+        visual={visual}
+        windowSize={{ width: box / 0.6 * 0.9, height: box / 0.6 * 0.9 }}
+        hideStatus
+      />
     </div>
   );
 }
@@ -318,6 +290,7 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
                     onChange={(e) => moveToDisplay(e.target.value)}
                     className="w-full bg-white/5 text-gray-200 text-sm rounded-lg px-3 py-2 border border-white/10 outline-none"
                   >
+                    <option value="" className="bg-[#12121a]">Automatic (first display that isn't this one)</option>
                     {displays.map((d) => (
                       <option key={d.id} value={String(d.id)} className="bg-[#12121a]">
                         {d.label}{d.primary ? ' (Primary)' : ''} — {d.bounds.width}×{d.bounds.height}
@@ -330,7 +303,7 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
                   </div>
                 )}
                 <p className="text-[11px] text-gray-500 mt-1.5">
-                  Defaults to the first non-primary display on launch — pick a different one here if needed.
+                  Where the countdown appears. Automatic picks a display other than the one this controller is on.
                 </p>
               </div>
 
@@ -431,9 +404,15 @@ export default function SettingsModal({ open, onClose, visual, onChange }: Setti
                     </select>
                   </div>
                   <ColorInput label="Text Color" value={visual.text.color} onChange={(v) => update({ text: { ...visual.text, color: v } })} />
-                  <SliderInput label="Font Size" value={visual.text.fontSize} min={20} max={96} unit="px" onChange={(v) => update({ text: { ...visual.text, fontSize: v } })} />
+                  <SliderInput label="Font Size" value={visual.text.fontSize} min={24} max={60} format={(v) => `${Math.round((v / DEFAULT_FONT_SIZE) * 100)}%`} onChange={(v) => update({ text: { ...visual.text, fontSize: v } })} />
                   <SliderInput label="Shadow" value={visual.text.shadowIntensity} min={0} max={50} onChange={(v) => update({ text: { ...visual.text, shadowIntensity: v } })} />
                 </div>
+              </div>
+
+              {/* Startup & Schedule */}
+              <div>
+                <SectionTitle icon={CalendarClock} title="Startup & Schedule" />
+                <ScheduleSettings />
               </div>
 
               {/* Clock Format */}
