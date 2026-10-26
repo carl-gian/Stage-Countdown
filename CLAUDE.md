@@ -68,17 +68,41 @@ Zoom, so participants see the timer (Media Display scene) and then the camera ag
 - OBS problems never stop a countdown: they show in the "OBS:" row of the controller. Timings: `SEQUENCE.obs` (pinned by tests).
 - `tests/obs.test.ts` runs the module against a fake OBS server; run real-OBS checks from `docs/TEST-CHECKLIST.md`.
 
+## 2c. Release features (tray, dock, updates, help)
+
+- **Tray:** the controller window hides on close AND minimize (`quitting` flag in `main.cjs`); only tray **Quit** (confirmed) or the
+  auto-close countdown (`close-app`) really quits. Single-instance lock; second launch shows the window. Tray icon is
+  `resources/icon.ico` when packaged (electron-builder `extraResources`) and `build/icon.ico` in dev.
+- **Start hidden / autostart:** `startMinimized` now means "start hidden in the tray". Turning OBS scene switching ON also sets
+  `autoLaunch` + `startMinimized` (once, on the off→on change; the user can turn them off afterwards).
+- **First run / update:** `launchKind(lastSeenVersion, version)` (logic.cjs). First run opens Help; after an update the window is
+  shown even if "start hidden" is on and the What's new dialog opens; `ack-version` records it. `src/lib/changelog.ts` needs an entry for
+  every `package.json` version (a test enforces it).
+- **Auto-update:** `electron/updater.cjs` (electron-updater, GitHub Releases). Checks 8 s after every start and every 6 h; downloads
+  quietly; NEVER installs on its own (badge in the app + dock, Windows notification, tray item; or on quit). Disabled in dev and in
+  the portable build. If the repo is renamed/moved, change `build.publish` in package.json. The repo must be public.
+- **OBS dock:** `electron/dock.cjs` + `dock-page.cjs`, `http://127.0.0.1:4578/dock`, started only while OBS switching is on. It is a
+  remote control: commands (`start/startAt/setTime/pause/resume/stop/restart/skip`) are validated (`parseCommand`) and forwarded to
+  the controller window (`dock-command`), which runs the same handlers as its buttons. The controller pushes its state
+  (`dock-state`) on every change; the page computes the countdown locally from `endsAt`. POSTs need `X-Stage-Dock: 1`; Host is checked.
+- **M³ optional:** `config.m3.enabled` (default true). When off, `setM3Hidden` is a no-op and the controller hides the M³ row.
+- **Help:** content is data in `src/lib/help.ts`, rendered by `HelpModal` (F1 / ? button / tray → Help).
+- Logs: `userData/logs/stagecountdown.log` (rotated at 1 MB).
+
 ## 3. Code map
 
 ```
 electron/main.cjs      windows, IPC handlers, PowerShell (focus + hotkey), config file, scheduler, login item
 electron/obs.cjs       optional OBS WebSocket scene switching (no Electron imports)
+electron/dock.cjs      OBS custom-dock HTTP server (+ dock-page.cjs, the page)
+electron/updater.cjs   electron-updater wrapper (never auto-installs)
 electron/logic.cjs     PURE helpers (deepMerge, shortcutToKeys, scheduleDueKey) — unit tested
 electron/preload.cjs   the window.electronAPI bridge (typed in src/electron.d.ts)
 src/App.tsx            sequences, controller/stage routing (?view=stage)
 src/hooks/useCountdownTimer.ts   wall-clock countdown (endsAt)
 src/lib/time.ts        formatCountdown, nextOccurrence (tested)
-src/components/        Controller, TimerDisplay (stage), SettingsModal, ScheduleSettings
+src/components/        Controller, TimerDisplay (stage), SettingsModal, ScheduleSettings, ObsSettings, HelpModal, WhatsNewModal
+src/lib/               sequence.ts (timings), help.ts (guide text), changelog.ts, time.ts
 tests/                 vitest
 ```
 
@@ -103,7 +127,6 @@ Always run `npm test` and `npm run typecheck` before committing.
 - Everything Windows-specific (PowerShell worker, focus verification, hotkey, always-on-top stage, controller-close restore,
   minimized timing) was written on a Mac and is **untested on a real Windows rig**: run `docs/TEST-CHECKLIST.md` before a live meeting.
 - macOS is unsupported (PowerShell).
-- Installed copies don't self-update (no `electron-updater`).
 
 ## 6. Pitfalls
 

@@ -72,9 +72,10 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
     return withTimeout(ws.call(type, data), REQUEST_TIMEOUT_MS, type);
   };
 
+  const sceneNames = (list) => (list.scenes || []).map((s) => s.sceneName).reverse(); // OBS lists bottom-up
+
   async function refreshScenes() {
-    const list = await call('GetSceneList');
-    scenes = (list.scenes || []).map((s) => s.sceneName).reverse(); // OBS lists bottom-up
+    scenes = sceneNames(await call('GetSceneList'));
     publish();
   }
 
@@ -127,9 +128,10 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
         scheduleRetry();
       });
       client.on('SceneListChanged', () => refreshScenes().catch(() => {}));
-      state = 'connected';
-      error = '';
-      await refreshScenes();
+      // "Connected" only once the scenes are known, so the UI never shows a connected OBS with an empty list.
+      scenes = sceneNames(await withTimeout(client.call('GetSceneList'), REQUEST_TIMEOUT_MS, 'GetSceneList'));
+      if (gen !== generation || ws !== client) return;
+      setState('connected');
       log('[obs] connected', { port: settings.port, version });
     } catch (err) {
       client.disconnect().catch(() => {});

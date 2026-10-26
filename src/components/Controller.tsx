@@ -8,6 +8,7 @@ import {
   Pin,
   PinOff,
   Settings,
+  HelpCircle,
   Plus,
   Minus,
   SkipForward,
@@ -29,6 +30,7 @@ interface ControllerProps {
   onRestart: () => void;
   onSetNewTime: () => void;
   onOpenSettings: () => void;
+  onOpenHelp: () => void;
   pinned: boolean;
   onTogglePin: () => void;
   visual: VisualSettings;
@@ -210,6 +212,7 @@ export default function Controller({
   onRestart,
   onSetNewTime,
   onOpenSettings,
+  onOpenHelp,
   pinned,
   onTogglePin,
   visual,
@@ -270,6 +273,16 @@ export default function Controller({
             ) : (
               <PinOff size={16} className="text-gray-500" />
             )}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onOpenHelp}
+            className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+            title="Help (F1)"
+            aria-label="Help"
+          >
+            <HelpCircle size={16} className="text-gray-400 hover:text-white transition-colors" />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }}

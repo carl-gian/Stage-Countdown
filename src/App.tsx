@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Controller, { type Phase } from '@/components/Controller';
 import TimerDisplay from '@/components/TimerDisplay';
 import SettingsModal from '@/components/SettingsModal';
+import HelpModal from '@/components/HelpModal';
+import WhatsNewModal from '@/components/WhatsNewModal';
 import { useCountdownTimer, saveVisualSettings } from '@/hooks/useCountdownTimer';
 import { DEFAULT_VISUAL_SETTINGS, mergeVisual, type StageState, type VisualSettings } from '@/types';
 import { nextOccurrence } from '@/lib/time';
@@ -22,6 +24,7 @@ function safeLoadVisualSettings(): VisualSettings {
 /** What we last did to M3 ("hidden" is our belief: its hotkey is a toggle we can't read back). */
 interface M3Status {
   ok: boolean;
+  enabled?: boolean;
   hidden: boolean;
   error?: string;
 }
@@ -98,6 +101,53 @@ function ControllerView() {
   const cancelPendingObsMedia = useCallback(() => {
     if (obsMediaTimerRef.current) clearTimeout(obsMediaTimerRef.current);
     obsMediaTimerRef.current = null;
+  }, []);
+
+  // Help guide, What's new, auto-update badge.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpTopic, setHelpTopic] = useState('start');
+  const [whatsNew, setWhatsNew] = useState<{ open: boolean; from?: string }>({ open: false });
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+
+  const openHelp = useCallback((topic = 'start') => {
+    setHelpTopic(topic);
+    setHelpOpen(true);
+  }, []);
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    api?.getAppInfo?.().then((info) => {
+      setAppInfo(info);
+      setUpdate(info.update);
+      // First ever start: the quick-start guide. First start after an update: what's new.
+      if (info.launch === 'first-run') openHelp('start');
+      else if (info.launch === 'updated') setWhatsNew({ open: true, from: info.lastSeenVersion });
+    });
+    const offUpdate = api?.onUpdateStatus?.(setUpdate);
+    const offHelp = api?.onOpenHelp?.((t) => openHelp(t));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        openHelp('start');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      offUpdate?.();
+      offHelp?.();
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [openHelp]);
+
+  const closeHelp = useCallback(() => {
+    setHelpOpen(false);
+    window.electronAPI?.ackVersion?.();
+  }, []);
+
+  const closeWhatsNew = useCallback(() => {
+    setWhatsNew({ open: false });
+    window.electronAPI?.ackVersion?.();
   }, []);
 
   const askConfirm = useCallback(
@@ -398,6 +448,77 @@ function ControllerView() {
     setTargetTimeMode(false);
   }, []);
 
+  // --- OBS DOCK ------------------------------------------------------------
+  // The dock is a remote control: each command does exactly what the matching button here does.
+  const dockCommandRef = useRef<(cmd: DockCommand) => void>(() => {});
+  dockCommandRef.current = (cmd) => {
+    const idle = (timer.state === 'idle' || timer.state === 'complete') && !busyRef.current;
+    const hasTime = cmd.minutes !== undefined && cmd.seconds !== undefined;
+    switch (cmd.action) {
+      case 'setTime':
+        if (idle && hasTime) {
+          setTargetTimeMode(false);
+          setTargetTimeValue('');
+          timer.setSettings({ minutes: cmd.minutes!, seconds: cmd.seconds! });
+        }
+        break;
+      case 'start': {
+        if (!idle && timer.state !== 'idle') break;
+        if (hasTime) {
+          const ms = (cmd.minutes! * 60 + cmd.seconds!) * 1000;
+          setTargetTimeMode(false);
+          setTargetTimeValue('');
+          timer.setSettings({ minutes: cmd.minutes!, seconds: cmd.seconds! });
+          if (ms > 0) runStartSequence(() => ms);
+        } else {
+          handleStart();
+        }
+        break;
+      }
+      case 'startAt': {
+        if (!idle || !cmd.time) break;
+        const targetAt = nextOccurrence(cmd.time, new Date()).getTime();
+        setTargetTimeValue(cmd.time);
+        setTargetTimeMode(true);
+        runStartSequence((startAt) => targetAt - startAt);
+        break;
+      }
+      case 'pause':
+        timer.pause();
+        break;
+      case 'resume':
+        timer.resume();
+        break;
+      case 'restart':
+        if (timer.state === 'paused' || timer.state === 'complete') handleRestart();
+        break;
+      case 'stop':
+        if (timer.state === 'running' || timer.state === 'paused') handleStop();
+        break;
+      case 'skip':
+        skipHoldRef.current?.();
+        break;
+    }
+  };
+
+  useEffect(() => window.electronAPI?.onDockCommand?.((cmd) => dockCommandRef.current(cmd)), []);
+
+  useEffect(() => {
+    window.electronAPI?.pushDockState?.({
+      timerState: timer.state,
+      minutes: timer.settings.minutes,
+      seconds: timer.settings.seconds,
+      totalMs: timer.totalMs,
+      remainingMs: timer.state === 'running' ? 0 : timer.remainingMs,
+      endsAt: timer.endsAt,
+      phase,
+      quitAt,
+      m3: { enabled: m3.enabled !== false, hidden: m3.hidden, ok: m3.ok, error: m3.error },
+      autoClose,
+      clock24h: visual.clock24h,
+    });
+  }, [timer.state, timer.settings.minutes, timer.settings.seconds, timer.totalMs, timer.remainingMs, timer.endsAt, phase, quitAt, m3, autoClose, visual.clock24h]);
+
   const noopNumberHandler = useCallback(() => {}, []);
 
   const bgStyle = visual?.background?.mode === 'gradient'
@@ -446,7 +567,12 @@ function ControllerView() {
 
           <AutoCloseButton autoClose={autoClose} quitAt={quitAt} onClick={handleAutoCloseButton} />
 
-          <M3StatusRow status={m3} busy={busy} onToggle={handleToggleM3} onFlip={handleFlipM3Label} />
+          {update && (update.status === 'ready' || update.status === 'downloading') && (
+            <UpdateBadge update={update} />
+          )}
+          {m3.enabled !== false && (
+            <M3StatusRow status={m3} busy={busy} onToggle={handleToggleM3} onFlip={handleFlipM3Label} />
+          )}
           {obsStatus?.enabled && <ObsStatusRow status={obsStatus} note={obsNote} />}
         </div>
 
@@ -465,6 +591,7 @@ function ControllerView() {
             onRestart={handleRestart}
             onSetNewTime={handleSetNewTime}
             onOpenSettings={() => setSettingsOpen(true)}
+            onOpenHelp={() => openHelp('start')}
             pinned={pinned}
             onTogglePin={togglePin}
             visual={visual}
@@ -499,7 +626,16 @@ function ControllerView() {
         onClose={() => setSettingsOpen(false)}
         visual={visual}
         onChange={setVisual}
+        onM3EnabledChange={() => window.electronAPI?.getM3State?.().then(applyM3).catch(() => {})}
+        onOpenHelp={(t) => {
+          setSettingsOpen(false);
+          openHelp(t);
+        }}
+        onShowWhatsNew={() => setWhatsNew({ open: true })}
       />
+
+      <HelpModal open={helpOpen} topic={helpTopic} onClose={closeHelp} />
+      <WhatsNewModal open={whatsNew.open} version={appInfo?.version ?? ''} from={whatsNew.from} onClose={closeWhatsNew} />
     </div>
   );
 }
@@ -659,6 +795,26 @@ function ObsStatusRow({ status, note }: { status: ObsStatus; note: string }) {
         {note && <span className="text-red-400"> · {note}</span>}
       </span>
     </div>
+  );
+}
+
+/** The blue "Update ready" badge. Click to restart and update (the app asks first). */
+function UpdateBadge({ update }: { update: UpdateInfo }) {
+  if (update.status === 'downloading') {
+    return (
+      <div className="w-full rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-200">
+        Downloading update {update.version}… {update.percent}%
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={() => window.electronAPI?.updateInstall?.()}
+      className="w-full rounded-lg border border-blue-400 bg-blue-600/90 px-3 py-2 text-sm font-bold text-white shadow-lg hover:bg-blue-500"
+      title="Install the update and restart the app (it asks first)"
+    >
+      ⬆ Update {update.version} ready — click to restart and update
+    </button>
   );
 }
 

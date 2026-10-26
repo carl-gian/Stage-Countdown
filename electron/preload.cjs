@@ -1,5 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const subscribe = (channel, callback) => {
+  const handler = (_event, data) => callback(data);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+};
+
 const api = {
   setAlwaysOnTop: (pinned) => ipcRenderer.invoke('set-always-on-top', pinned),
   getDisplays: () => ipcRenderer.invoke('get-displays'),
@@ -22,6 +28,20 @@ const api = {
   toggleM3: () => ipcRenderer.invoke('toggle-m3'),
   getM3State: () => ipcRenderer.invoke('get-m3-state'),
   setM3State: (hidden) => ipcRenderer.invoke('set-m3-state', hidden),
+
+  // App info, auto-update, help, dock. (Events return their unsubscribe function.)
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  ackVersion: () => ipcRenderer.invoke('ack-version'),
+  updateGetStatus: () => ipcRenderer.invoke('update-get-status'),
+  updateCheck: () => ipcRenderer.invoke('update-check'),
+  updateInstall: () => ipcRenderer.invoke('update-install'),
+  openLogs: () => ipcRenderer.invoke('open-logs'),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  pushDockState: (state) => ipcRenderer.send('dock-state', state),
+  onUpdateStatus: (cb) => subscribe('update-status', cb),
+  onDockCommand: (cb) => subscribe('dock-command', cb),
+  onOpenHelp: (cb) => subscribe('open-help', cb),
+  onAppSettingsChanged: (cb) => subscribe('app-settings-changed', cb),
 
   // Optional OBS scene switching (all OBS access lives in electron/obs.cjs).
   obsGetStatus: () => ipcRenderer.invoke('obs-get-status'),

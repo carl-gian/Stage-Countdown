@@ -35,3 +35,13 @@ In OBS: Tools -> WebSocket Server Settings -> enable (note port and password). M
 - [ ] Stop mid-count: OBS returns to the Camera scene. Close the app mid-count: OBS returns to the Camera scene.
 - [ ] Studio Mode ON in OBS: it still switches correctly. Your own transition type and Fade duration in OBS are unchanged afterwards.
 - [ ] Quit OBS mid-countdown: the countdown carries on; the "OBS:" row shows it is looking again; nothing crashes.
+
+## Release features (tray, startup, dock, updates, help, standalone)
+- [ ] Close (X) and minimize both hide the window to the tray and remove it from the taskbar. Clicking the tray icon shows/hides it. Tray > Quit asks first.
+- [ ] Start the app twice: the second start just shows the running window.
+- [ ] Turn OBS scene switching on: "Launch at Windows startup" and "Start hidden in the tray" are switched on in Startup & Schedule. Restart Windows: the app is in the tray, not on screen, and the dock/OBS switching work.
+- [ ] Settings > M³ > switch "Control M³'s media window" off: the "M³ media" row disappears; Start runs the same fade sequence and M³ is never touched; Stop/finish never sends a shortcut.
+- [ ] OBS dock: add it in OBS (View > Docks > Custom Browser Docks, http://127.0.0.1:4578/dock). Set the time, Start, Pause, Resume, Stop, "Start at time", Restart: each behaves exactly like the main window (including the M³ and OBS hand-offs). "Open app" shows the window.
+- [ ] Dock shows the countdown, the clock, M³/OBS badges, and the blue update badge. Quit the app: the dock says "App not responding".
+- [ ] Help: ? button and F1 open the guide; every tab reads correctly; first-ever start opens it by itself.
+- [ ] Updates: install an older version, publish a newer one: within a few seconds of the next start the blue "Update ready" badge appears in the app AND the dock, with a Windows notification; clicking it asks first; after restart "What's new" shows once. The portable build says it cannot update itself.

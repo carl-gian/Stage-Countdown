@@ -1,10 +1,34 @@
-const { app, BrowserWindow, ipcMain, screen, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, safeStorage, Tray, Menu, nativeImage, Notification, dialog, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
-const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, sealSecret, openSecret } = require('./logic.cjs');
+const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, sealSecret, openSecret, launchKind } = require('./logic.cjs');
 const { createObs } = require('./obs.cjs');
+const { createDock } = require('./dock.cjs');
+const { createUpdater } = require('./updater.cjs');
+
+app.setAppUserModelId('com.stagecountdown.app'); // Windows notifications + taskbar identity
+
+// One copy only: starting it again just shows the running window.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+
+// --- LOG FILE (userData/logs/stagecountdown.log, rotated at 1 MB) ---
+const logDir = () => path.join(app.getPath('userData'), 'logs');
+function writeLog(level, args) {
+  const line = `${new Date().toISOString()} ${level} ${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}\n`;
+  try {
+    const file = path.join(logDir(), 'stagecountdown.log');
+    fs.mkdirSync(logDir(), { recursive: true });
+    if (fs.existsSync(file) && fs.statSync(file).size > 1_000_000) fs.renameSync(file, `${file}.old`);
+    fs.appendFileSync(file, line);
+  } catch {
+    // logging must never break the app
+  }
+}
+const log = { info: (...a) => writeLog('INFO', a), error: (...a) => writeLog('ERROR', a) };
+
 
 let controllerWindow = null;
 let stageWindow = null;
@@ -46,7 +70,7 @@ function saveConfig(patch) {
     fs.mkdirSync(path.dirname(configPath()), { recursive: true });
     fs.writeFileSync(configPath(), JSON.stringify(configCache, null, 2));
   } catch (err) {
-    console.error('Could not save config', err);
+    log.error('Could not save config', err);
   }
   return configCache;
 }
@@ -60,15 +84,140 @@ function applyLoginItem() {
 const secretBox = () => (safeStorage && safeStorage.isEncryptionAvailable() ? safeStorage : null);
 
 const obs = createObs({
-  log: (...a) => console.log(...a),
-  onStatus: (status) => {
-    if (controllerWindow && !controllerWindow.isDestroyed()) controllerWindow.webContents.send('obs-status', status);
-  },
+  log: (...a) => log.info(...a),
+  onStatus: () => pushObsStatus(),
 });
 
 function applyObsConfig(force = false) {
   const cfg = loadConfig();
   obs.configure({ ...cfg.obs, password: openSecret(cfg.obsPasswordEnc, secretBox()) }, { force });
+}
+
+const sendToController = (channel, payload) => {
+  if (controllerWindow && !controllerWindow.isDestroyed()) controllerWindow.webContents.send(channel, payload);
+};
+
+// --- OBS DOCK (only while OBS scene switching is on) ---
+let lastDockState = null; // pushed by the controller window whenever something changes
+
+const dock = createDock({
+  log: (m) => log.info(m),
+  getState: () => ({
+    ...(lastDockState || { timerState: 'idle', minutes: 5, seconds: 0, remainingMs: 0, endsAt: 0, phase: null, m3: { enabled: false } }),
+    obs: obs.status(),
+    update: updater.info(),
+  }),
+  sendCommand: (cmd) => {
+    if (!controllerWindow || controllerWindow.isDestroyed()) return false;
+    controllerWindow.webContents.send('dock-command', cmd);
+    return true;
+  },
+  openWindow: () => showWindow(),
+});
+
+const obsStatusFull = () => ({ ...obs.status(), dock: dock.status() });
+function pushObsStatus() {
+  sendToController('obs-status', obsStatusFull());
+}
+
+/** Starts or stops the dock server to match the OBS setting. */
+async function syncDock() {
+  if (loadConfig().obs.enabled) await dock.start();
+  else dock.stop();
+  pushObsStatus();
+}
+
+// --- AUTO-UPDATE ---
+const updater = createUpdater({
+  log,
+  onChange: () => {
+    updateTray();
+    sendToController('update-status', updater.info());
+  },
+  // A Windows notification when an update is ready; clicking it opens the "restart and update" question.
+  onReady: (v) => {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({
+      title: 'Update ready',
+      body: `Stage Countdown ${v} is ready to install. Click here to restart and update.`,
+      icon: iconPath(),
+    });
+    n.on('click', () => {
+      showWindow();
+      void updater.promptInstall();
+    });
+    n.show();
+  },
+});
+
+// --- WINDOW VISIBILITY / TRAY ---
+let tray = null;
+let quitting = false;
+
+const iconPath = () => (app.isPackaged ? path.join(process.resourcesPath, 'icon.ico') : path.join(__dirname, '..', 'build', 'icon.ico'));
+
+function showWindow() {
+  if (!controllerWindow || controllerWindow.isDestroyed()) return;
+  if (controllerWindow.isMinimized()) controllerWindow.restore();
+  controllerWindow.show();
+  controllerWindow.focus();
+}
+
+async function confirmQuit() {
+  const r = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'Quit Stage Countdown?',
+    message: 'Quit Stage Countdown?',
+    detail: 'Scheduled countdowns, OBS scene switching and the OBS dock stop until you start the app again. Closing the window (X) keeps it running in the tray.',
+    buttons: ['Keep running', 'Quit'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  if (r.response === 1) app.quit();
+}
+
+function createTray() {
+  let img = nativeImage.createFromPath(iconPath());
+  if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
+  tray = new Tray(img);
+  tray.on('click', () => (controllerWindow?.isVisible() ? controllerWindow.hide() : showWindow()));
+  updateTray();
+}
+
+function updateTray() {
+  if (!tray) return;
+  const u = updater.info();
+  const obsState = obs.status();
+  const obsLine = !obsState.enabled ? null : obsState.state === 'connected' ? 'OBS: connected' : 'OBS: not detected';
+  tray.setToolTip(`Stage Countdown ${app.getVersion()}${u.status === 'ready' ? ` - update ${u.version} ready` : ''}`);
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: `Stage Countdown ${app.getVersion()}`, enabled: false },
+      ...(obsLine ? [{ label: obsLine, enabled: false }] : []),
+      { type: 'separator' },
+      { label: 'Show window', click: showWindow },
+      {
+        label: 'Help',
+        click: () => {
+          showWindow();
+          sendToController('open-help', 'start');
+        },
+      },
+      { type: 'separator' },
+      u.status === 'ready'
+        ? { label: `Restart to update to ${u.version} ...`, click: () => void updater.promptInstall() }
+        : {
+            label: u.status === 'downloading' ? `Downloading update ${u.version} (${u.percent}%) ...` : 'Check for updates',
+            enabled: u.status !== 'downloading',
+            click: () => updater.check(true),
+          },
+      { type: 'separator' },
+      { label: 'Open logs folder', click: () => void shell.openPath(logDir()) },
+      { type: 'separator' },
+      { label: 'Quit ...', click: () => void confirmQuit() },
+    ])
+  );
 }
 
 // --- SCHEDULER: fires 'scheduled-start' at time1 / time2 ---
@@ -204,7 +353,7 @@ function ensurePs() {
         }
       }
     });
-    child.stderr.on('data', (d) => console.error('[ps]', String(d)));
+    child.stderr.on('data', (d) => log.error('[ps]', String(d)));
     const gone = () => {
       if (psChild === child) psChild = null;
       resolveReady();
@@ -214,7 +363,7 @@ function ensurePs() {
     child.on('exit', gone);
     child.on('error', gone);
   } catch (err) {
-    console.error('Could not start PowerShell worker', err);
+    log.error('Could not start PowerShell worker', err);
     psChild = null;
     resolveReady();
   }
@@ -251,13 +400,14 @@ async function psSend(command, timeoutMs = 4000) {
 // restores if we believe it is hidden, so a failed or doubled call can't invert it.
 let m3Hidden = false;
 
-const m3Result = (ok, error) => ({ ok, hidden: m3Hidden, ...(error ? { error } : {}) });
+const m3Enabled = () => loadConfig().m3.enabled !== false;
+const m3Result = (ok, error) => ({ ok, enabled: m3Enabled(), hidden: m3Hidden, ...(error ? { error } : {}) });
 
 async function sendM3Hotkey() {
   const cfg = loadConfig();
   const focus = await psSend(`focus|${cfg.m3WindowTitle}`);
   if (focus !== 'OK') {
-    console.error('[m3] focus failed:', focus);
+    log.error('[m3] focus failed:', focus);
     return focus === 'FAIL nowindow' ? 'Meeting Media Manager window not found - is it open?' : `Could not focus M3 (${focus})`;
   }
   await delay(200);
@@ -265,13 +415,18 @@ async function sendM3Hotkey() {
   const key = await psSend(`key|${k.vkCode}|${+k.hasAlt}|${+k.hasShift}|${+k.hasCtrl}`);
   // Returns as soon as the key is sent: every wait after it lives in src/lib/sequence.ts.
   if (key !== 'OK') {
-    console.error('[m3] hotkey failed:', key);
+    log.error('[m3] hotkey failed:', key);
     return `Could not send the shortcut (${key})`;
   }
   return null;
 }
 
 async function setM3Hidden(target) {
+  // Standalone mode (no M3): nothing to hide or show and no shortcut is ever sent.
+  if (!m3Enabled()) {
+    m3Hidden = false;
+    return m3Result(true);
+  }
   if (m3Hidden === target) return m3Result(true);
   const error = await sendM3Hotkey();
   if (error) return m3Result(false, error);
@@ -297,7 +452,7 @@ const webPreferences = () => ({
 
 let closingRestore = false;
 
-function createWindow() {
+function createWindow(startHidden = false) {
   controllerWindow = new BrowserWindow({
     width: 520,
     height: 720,
@@ -309,15 +464,28 @@ function createWindow() {
     show: false,
     title: 'StageCountdown - Controller',
     backgroundColor: '#0a0a0f',
-    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    icon: iconPath(),
+    autoHideMenuBar: true,
     webPreferences: webPreferences(),
   });
+  controllerWindow.setMenu(null);
 
-  controllerWindow.once('ready-to-show', () => controllerWindow.show());
+  controllerWindow.once('ready-to-show', () => {
+    if (!startHidden) controllerWindow.show();
+  });
   controllerWindow.loadURL(getWindowUrl());
 
   // Never leave M3's media hidden: if we hid it, bring it back before closing.
+  // Closing OR minimizing hides the window to the tray (it also leaves the taskbar); the tray icon brings it back.
+  // Only "Quit" really closes it.
+  controllerWindow.on('minimize', () => controllerWindow.hide());
+
   controllerWindow.on('close', (event) => {
+    if (!quitting) {
+      event.preventDefault();
+      controllerWindow.hide();
+      return;
+    }
     if (closingRestore) return;
     // Also put OBS back on the camera scene if we left it on the media scene.
     const obsBack = obs.restoreCameraIfNeeded();
@@ -369,7 +537,7 @@ function launchStageWindow(target) {
       alwaysOnTop: true,
       title: 'StageCountdown - Display',
       backgroundColor: undefined,
-      icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+      icon: iconPath(),
       webPreferences: webPreferences(),
     });
     // Default "floating" level: M3's media window uses the higher "screen-saver" level, so when M3
@@ -398,14 +566,27 @@ function launchStageWindow(target) {
   return stageLoaded || Promise.resolve();
 }
 
+app.on('second-instance', () => showWindow());
+
 app.whenReady().then(() => {
+  if (!gotLock) return;
+  const version = app.getVersion();
+  log.info(`BUILD ${version} (electron ${process.versions.electron}, ${process.platform} ${process.arch}, ${app.isPackaged ? 'installed' : 'dev'})`);
   applyLoginItem();
-  createWindow();
-  if (loadConfig().startMinimized || process.argv.includes('--hidden')) {
-    controllerWindow.once('ready-to-show', () => controllerWindow.minimize());
-  }
+
+  // First run / first run after an update: show the window (even if "start hidden" is on) so Help / What's new can open.
+  const cfg = loadConfig();
+  const launch = launchKind(cfg.lastSeenVersion, version);
+  const wantsHidden = cfg.startMinimized || process.argv.includes('--hidden');
+  log.info(`Launch: ${launch}${wantsHidden ? ' (start hidden in tray)' : ''}`);
+  createWindow(wantsHidden && launch === 'normal');
+  createTray();
+  if (launch === 'normal' && cfg.lastSeenVersion !== version) saveConfig({ lastSeenVersion: version });
+
   startScheduler();
   applyObsConfig();
+  syncDock();
+  updater.start();
   if (process.platform === 'win32') ensurePs(); // compile the helper now, not on the first Start
 
   app.on('activate', () => {
@@ -417,8 +598,14 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+app.on('before-quit', () => {
+  quitting = true;
+});
+
 app.on('will-quit', () => {
   obs.dispose();
+  dock.stop();
+  updater.stop();
   try {
     psChild?.kill();
   } catch {
@@ -484,12 +671,43 @@ ipcMain.handle('set-config', (_event, patch) => {
   return publicConfig();
 });
 
+// --- APP INFO / UPDATES / DOCK ---
+ipcMain.handle('get-app-info', () => {
+  const cfg = loadConfig();
+  return {
+    version: app.getVersion(),
+    launch: launchKind(cfg.lastSeenVersion, app.getVersion()),
+    lastSeenVersion: cfg.lastSeenVersion,
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    update: updater.info(),
+  };
+});
+ipcMain.handle('ack-version', () => {
+  saveConfig({ lastSeenVersion: app.getVersion() });
+  return true;
+});
+ipcMain.handle('update-get-status', () => updater.info());
+ipcMain.handle('update-check', () => {
+  updater.check(true);
+  return updater.info();
+});
+ipcMain.handle('update-install', () => updater.promptInstall());
+ipcMain.handle('open-logs', () => shell.openPath(logDir()));
+ipcMain.handle('open-external', (_event, url) => {
+  if (typeof url === 'string' && /^https:\/\//.test(url)) return shell.openExternal(url);
+});
+ipcMain.on('dock-state', (_event, state) => {
+  lastDockState = state;
+});
+
 // --- OBS IPC ---
-ipcMain.handle('obs-get-status', () => obs.status());
+ipcMain.handle('obs-get-status', () => obsStatusFull());
 
 // settings: { enabled, port, password? (omit to keep the saved one, '' to clear), mediaScene, cameraScene }
-ipcMain.handle('obs-save-settings', (_event, settings) => {
+ipcMain.handle('obs-save-settings', async (_event, settings) => {
   const port = Number(settings?.port);
+  const wasEnabled = !!loadConfig().obs.enabled;
   const patch = {
     obs: {
       enabled: !!settings?.enabled,
@@ -499,14 +717,26 @@ ipcMain.handle('obs-save-settings', (_event, settings) => {
     },
   };
   if (typeof settings?.password === 'string') patch.obsPasswordEnc = sealSecret(settings.password, secretBox());
+  // Turning OBS switching ON also makes the app start with Windows, hidden in the tray, so the dock and
+  // scene switching are ready without anyone opening it. (Can be turned off again in Settings afterwards.)
+  const turnedOn = !wasEnabled && patch.obs.enabled;
+  if (turnedOn) {
+    patch.autoLaunch = true;
+    patch.startMinimized = true;
+  }
   saveConfig(patch);
+  if (turnedOn) {
+    applyLoginItem();
+    sendToController('app-settings-changed', { autoLaunch: true, startMinimized: true });
+  }
   applyObsConfig();
-  return obs.status();
+  await syncDock();
+  return obsStatusFull();
 });
 
 ipcMain.handle('obs-refresh', () => {
   applyObsConfig(true);
-  return obs.status();
+  return obsStatusFull();
 });
 
 ipcMain.handle('obs-switch', (_event, kind, fadeMs) =>
@@ -522,6 +752,7 @@ ipcMain.handle('close-stage-window', () => {
 });
 
 ipcMain.handle('close-app', () => {
+  quitting = true;
   app.quit();
 });
 

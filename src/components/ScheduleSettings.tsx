@@ -27,6 +27,11 @@ export default function ScheduleSettings() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [loaded, setLoaded] = useState(false);
 
+  // OBS scene switching switches these two on for the user: reflect that without reopening Settings.
+  useEffect(() => {
+    return window.electronAPI?.onAppSettingsChanged?.((patch) => setSettings((prev) => ({ ...prev, ...patch })));
+  }, []);
+
   useEffect(() => {
     (async () => {
       if (window.electronAPI?.getAppSettings) {
@@ -61,9 +66,9 @@ export default function ScheduleSettings() {
       {/* Start minimized */}
       <label className="flex items-center justify-between gap-4 cursor-pointer">
         <div>
-          <div className="text-sm font-semibold text-gray-200">Start minimized</div>
+          <div className="text-sm font-semibold text-gray-200">Start hidden in the tray</div>
           <div className="text-xs text-gray-500">
-            Launch straight to the taskbar instead of a normal window — applies to manual launches and boot autostart alike.
+            Open straight into the system tray instead of showing the window — applies to manual launches and Windows startup alike. Click the tray icon to show it.
           </div>
         </div>
         <input
@@ -79,7 +84,7 @@ export default function ScheduleSettings() {
         <div>
           <div className="text-sm font-semibold text-gray-200">Launch at Windows startup</div>
           <div className="text-xs text-gray-500">
-            Registers StageCountdown to start automatically when you log in — always minimized, regardless of the setting above.
+            Registers Stage Countdown to start automatically when you log in — always hidden in the tray, regardless of the setting above.
           </div>
         </div>
         <input

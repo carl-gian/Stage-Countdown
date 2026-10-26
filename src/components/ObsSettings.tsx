@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import CopyUrl from '@/components/CopyUrl';
 
 const DEFAULT_PORT = 4455;
 
@@ -206,6 +207,29 @@ export default function ObsSettings() {
           In OBS: Tools → WebSocket Server Settings → enable it, then use the same port and password here. Scenes appear once OBS is detected.
         </p>
       </div>
+
+      {enabled && (
+        <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">OBS dock</div>
+          <p className="text-[11px] leading-relaxed text-gray-400">
+            Control the timer from inside OBS: set the minutes and seconds (or a clock time to finish at), then start, pause and stop,
+            exactly like this window. Add it once:
+          </p>
+          <ol className="list-decimal pl-5 space-y-1 text-[11px] leading-relaxed text-gray-300">
+            <li>In OBS open <b>View → Docks → Custom Browser Docks</b>.</li>
+            <li>Dock Name: <b>Stage Countdown</b>. URL: the address below.</li>
+            <li>Click <b>Apply</b>, then drag the new dock wherever you like.</li>
+          </ol>
+          <CopyUrl url={status?.dock?.url ?? 'http://127.0.0.1:4578/dock'} />
+          <div className={`text-[11px] ${status?.dock?.running ? 'text-emerald-400' : 'text-red-400'}`}>
+            {status?.dock?.running ? '● Dock is running (only while this app is running)' : `● Dock is not running${status?.dock?.error ? `: ${status.dock.error}` : ''}`}
+          </div>
+          <p className="text-[11px] text-gray-500">
+            Turning this on also starts the app with Windows, hidden in the tray, so the dock and scene switching are always ready.
+            You can change that under Startup &amp; Schedule.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

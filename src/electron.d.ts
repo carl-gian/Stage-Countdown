@@ -8,6 +8,8 @@ interface DisplayInfo {
 
 interface M3Status {
   ok: boolean;
+  /** False when the M³ hand-off is switched off (standalone countdown). */
+  enabled?: boolean;
   hidden: boolean;
   error?: string;
 }
@@ -22,6 +24,33 @@ interface ObsStatus {
   cameraScene: string;
   version: string;
   error: string;
+  /** The OBS custom browser dock server (runs only while OBS switching is on). */
+  dock: { running: boolean; port: number; url: string; error: string };
+}
+
+interface UpdateInfo {
+  status: 'disabled' | 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error';
+  version: string;
+  percent: number;
+  /** Why updates are off: development run or the portable build. */
+  reason: '' | 'dev' | 'portable';
+}
+
+interface AppInfo {
+  version: string;
+  launch: 'first-run' | 'updated' | 'normal';
+  lastSeenVersion: string;
+  isPackaged: boolean;
+  platform: string;
+  update: UpdateInfo;
+}
+
+/** A command from the OBS dock (the same actions as the main window's buttons). */
+interface DockCommand {
+  action: 'start' | 'startAt' | 'setTime' | 'pause' | 'resume' | 'stop' | 'restart' | 'skip';
+  minutes?: number;
+  seconds?: number;
+  time?: string;
 }
 
 interface ObsSwitchResult {
@@ -44,6 +73,18 @@ interface Window {
     toggleM3: () => Promise<M3Status>;
     getM3State: () => Promise<M3Status>;
     setM3State: (hidden: boolean) => Promise<M3Status>;
+    getAppInfo: () => Promise<AppInfo>;
+    ackVersion: () => Promise<boolean>;
+    updateGetStatus: () => Promise<UpdateInfo>;
+    updateCheck: () => Promise<UpdateInfo>;
+    updateInstall: () => Promise<void>;
+    openLogs: () => Promise<string>;
+    openExternal: (url: string) => Promise<void>;
+    pushDockState: (state: unknown) => void;
+    onUpdateStatus: (callback: (info: UpdateInfo) => void) => () => void;
+    onDockCommand: (callback: (cmd: DockCommand) => void) => () => void;
+    onOpenHelp: (callback: (topic: string) => void) => () => void;
+    onAppSettingsChanged: (callback: (patch: { autoLaunch?: boolean; startMinimized?: boolean }) => void) => () => void;
     obsGetStatus: () => Promise<ObsStatus>;
     obsSaveSettings: (settings: {
       enabled: boolean;

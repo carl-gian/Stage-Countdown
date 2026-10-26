@@ -12,6 +12,9 @@ const DEFAULT_CONFIG = {
   schedule: { enabled: false, time1: '', time2: '', durationMinutes: 5 },
   // Optional OBS scene switching. The WebSocket password is NOT here: see obsPasswordEnc.
   obs: { enabled: false, port: 4455, mediaScene: '', cameraScene: '' },
+  // Meeting Media Manager hand-off. Off = a standalone countdown (nothing is hidden/shown, no shortcut is sent).
+  m3: { enabled: true },
+  lastSeenVersion: '',
   obsPasswordEnc: '',
 };
 
@@ -79,7 +82,28 @@ function openSecret(sealed, decrypt) {
   return '';
 }
 
+const parseVersion = (v) => String(v).split('-')[0].split('.').map((n) => parseInt(n, 10) || 0);
+
+/** <0 if a is older than b, 0 if equal, >0 if newer. */
+function compareVersions(a, b) {
+  const x = parseVersion(a);
+  const y = parseVersion(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/** What to do at start-up, from the version last acknowledged on this PC. */
+function launchKind(lastSeen, current) {
+  if (!lastSeen) return 'first-run';
+  return compareVersions(current, lastSeen) > 0 ? 'updated' : 'normal';
+}
+
 module.exports = {
+  compareVersions,
+  launchKind,
   chooseFadeTransition,
   sealSecret,
   openSecret, DEFAULT_SHORTCUT, DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey };
