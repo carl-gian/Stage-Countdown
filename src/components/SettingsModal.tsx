@@ -209,7 +209,7 @@ function MiniPreview({ visual }: { visual: VisualSettings }) {
         endsAt={0}
         state="idle"
         visual={visual}
-        windowSize={{ width: box / 0.6 * 0.9, height: box / 0.6 * 0.9 }}
+        windowSize={{ width: box / 0.6 * 0.7, height: box / 0.6 * 0.7 }} /* leaves room around the ring for its glow */
         hideStatus
       />
     </div>

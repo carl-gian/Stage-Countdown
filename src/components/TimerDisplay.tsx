@@ -76,7 +76,8 @@ export default function TimerDisplay({
       className={`relative flex flex-col items-center justify-center${state === 'complete' ? ' stage-heartbeat' : ''}`}
       style={{ width: size, height: size }}
     >
-      <svg width={size} height={size} className="transform -rotate-90">
+      {/* overflow visible: an inline SVG clips everything outside its own square, which cut the ring's glow off in a square */}
+      <svg width={size} height={size} className="transform -rotate-90" style={{ overflow: 'visible' }}>
         <circle
           cx={size / 2}
           cy={size / 2}
