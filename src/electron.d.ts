@@ -39,6 +39,8 @@ interface ObsStatus {
   cameraScene: string;
   /** What OBS goes back to when the countdown ends or stops. */
   returnMode: 'camera' | 'previous';
+  /** Start hidden in the tray while OBS switching is on. */
+  startHidden: boolean;
   /** The scene OBS was on before the countdown (only while a countdown has it switched away). */
   previousScene: string;
   version: string;
@@ -117,6 +119,7 @@ interface Window {
       mediaScene: string;
       cameraScene: string;
       returnMode: 'camera' | 'previous';
+      startHidden: boolean;
     }) => Promise<ObsStatus>;
     obsRefresh: () => Promise<ObsStatus>;
     obsSwitch: (kind: 'media' | 'return', fadeMs: number) => Promise<ObsSwitchResult>;

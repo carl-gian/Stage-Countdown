@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, describeShortcut } = require('../electron/logic.cjs');
+const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, describeShortcut, startsHidden } = require('../electron/logic.cjs');
 
 describe('deepMerge', () => {
   it('merges nested objects without mutating the base', () => {
@@ -73,5 +73,21 @@ describe('describeShortcut', () => {
     expect(describeShortcut(undefined)).toBe('Alt + Shift + F3');
     expect(describeShortcut({ ctrl: true, alt: false, shift: false, code: 'KeyY' })).toBe('Ctrl + Y');
     expect(describeShortcut({ ctrl: false, alt: true, shift: true, code: 'Digit5' })).toBe('Alt + Shift + 5');
+  });
+});
+
+describe('startsHidden', () => {
+  const base = { startMinimized: false, obs: { enabled: false, startHidden: true } };
+  it('shows the window by default', () => {
+    expect(startsHidden(base, [])).toBe(false);
+  });
+  it('hides while OBS switching is on, unless that option is off', () => {
+    expect(startsHidden({ ...base, obs: { enabled: true, startHidden: true } }, [])).toBe(true);
+    expect(startsHidden({ ...base, obs: { enabled: true } }, [])).toBe(true);
+    expect(startsHidden({ ...base, obs: { enabled: true, startHidden: false } }, [])).toBe(false);
+  });
+  it('still honours the general setting and --hidden', () => {
+    expect(startsHidden({ ...base, startMinimized: true, obs: { enabled: true, startHidden: false } }, [])).toBe(true);
+    expect(startsHidden(base, ['--hidden'])).toBe(true);
   });
 });

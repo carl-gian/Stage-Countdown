@@ -3,7 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
-const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, sealSecret, openSecret, launchKind } = require('./logic.cjs');
+const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, sealSecret, openSecret, launchKind, startsHidden } = require('./logic.cjs');
 const { createObs } = require('./obs.cjs');
 const { createDock } = require('./dock.cjs');
 const { createUpdater } = require('./updater.cjs');
@@ -116,7 +116,7 @@ const dock = createDock({
   openWindow: () => showWindow(),
 });
 
-const obsStatusFull = () => ({ ...obs.status(), dock: dock.status() });
+const obsStatusFull = () => ({ ...obs.status(), startHidden: loadConfig().obs.startHidden !== false, dock: dock.status() });
 function pushObsStatus() {
   sendToController('obs-status', obsStatusFull());
 }
@@ -638,7 +638,7 @@ app.whenReady().then(() => {
   // First run / first run after an update: show the window (even if "start hidden" is on) so Help / What's new can open.
   const cfg = loadConfig();
   const launch = launchKind(cfg.lastSeenVersion, version);
-  const wantsHidden = cfg.startMinimized || process.argv.includes('--hidden');
+  const wantsHidden = startsHidden(cfg, process.argv);
   log.info(`Launch: ${launch}${wantsHidden ? ' (start hidden in tray)' : ''}`);
   createWindow(wantsHidden && launch === 'normal');
   createTray();
@@ -778,20 +778,18 @@ ipcMain.handle('obs-save-settings', async (_event, settings) => {
       mediaScene: String(settings?.mediaScene ?? ''),
       cameraScene: String(settings?.cameraScene ?? ''),
       returnMode: settings?.returnMode === 'previous' ? 'previous' : 'camera',
+      startHidden: settings?.startHidden !== false,
     },
   };
   if (typeof settings?.password === 'string') patch.obsPasswordEnc = sealSecret(settings.password, secretBox());
   // Turning OBS switching ON also makes the app start with Windows, hidden in the tray, so the dock and
   // scene switching are ready without anyone opening it. (Can be turned off again in Settings afterwards.)
   const turnedOn = !wasEnabled && patch.obs.enabled;
-  if (turnedOn) {
-    patch.autoLaunch = true;
-    patch.startMinimized = true;
-  }
+  if (turnedOn) patch.autoLaunch = true;
   saveConfig(patch);
   if (turnedOn) {
     applyLoginItem();
-    sendToController('app-settings-changed', { autoLaunch: true, startMinimized: true });
+    sendToController('app-settings-changed', { autoLaunch: true });
   }
   applyObsConfig();
   await syncDock();

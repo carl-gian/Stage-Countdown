@@ -127,7 +127,7 @@ Good to know:
 - The app looks for OBS every few seconds, so OBS can be opened before or after the app. A wrong password is reported clearly.
 - OBS **Studio Mode** works. Your own transition type and Fade duration are put back afterwards.
 - OBS problems never stop a countdown; the **OBS:** row on the controller shows what's wrong.
-- Turning this on also switches on **Launch at Windows startup** and **Start hidden in the tray**, so scene switching and the dock are ready without anyone opening the app. You can turn those off again in *Settings → Startup & Schedule*.
+- Turning this on also switches on **Launch at Windows startup**, and while it is on the app **starts hidden in the tray**, so scene switching and the dock are ready without anyone opening it. You can turn either off: the hidden start in the OBS settings, Windows startup in *Settings → Startup & Schedule*.
 
 ---
 

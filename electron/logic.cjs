@@ -14,7 +14,7 @@ const DEFAULT_CONFIG = {
   autoLaunch: false,
   schedule: { enabled: false, time1: '', time2: '', durationMinutes: 5 },
   // Optional OBS scene switching. The WebSocket password is NOT here: see obsPasswordEnc.
-  obs: { enabled: false, port: 4455, mediaScene: '', cameraScene: '', returnMode: 'camera' },
+  obs: { enabled: false, port: 4455, mediaScene: '', cameraScene: '', returnMode: 'camera', startHidden: true },
   // Meeting Media Manager hand-off. Off = a standalone countdown (nothing is hidden/shown, no shortcut is sent).
   // directFallback: if M3 ignores the shortcut, hide/show its media window directly (Win32) so it can never stay on top.
   // focusController: select M3's own window ("Meeting media - M3") before pressing the shortcut.
@@ -101,6 +101,12 @@ function compareVersions(a, b) {
 }
 
 /** What to do at start-up, from the version last acknowledged on this PC. */
+/** Should the app start hidden in the tray? Yes if asked to (setting / --hidden), or while OBS switching + dock are on (unless turned off). */
+function startsHidden(cfg, argv = []) {
+  const obsOn = !!(cfg.obs && cfg.obs.enabled && cfg.obs.startHidden !== false);
+  return !!cfg.startMinimized || obsOn || argv.includes('--hidden');
+}
+
 function launchKind(lastSeen, current) {
   if (!lastSeen) return 'first-run';
   return compareVersions(current, lastSeen) > 0 ? 'updated' : 'normal';
@@ -118,6 +124,7 @@ module.exports = {
   describeShortcut,
   compareVersions,
   launchKind,
+  startsHidden,
   chooseFadeTransition,
   sealSecret,
   openSecret, DEFAULT_SHORTCUT, DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey };

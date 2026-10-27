@@ -61,6 +61,7 @@ export default function ObsSettings() {
   const [mediaScene, setMediaScene] = useState('');
   const [cameraScene, setCameraScene] = useState('');
   const [returnMode, setReturnMode] = useState<'camera' | 'previous'>('camera');
+  const [startHidden, setStartHidden] = useState(true);
   const [clearPassword, setClearPassword] = useState(false);
   const loaded = useRef(false);
 
@@ -73,13 +74,14 @@ export default function ObsSettings() {
       setMediaScene(s.mediaScene);
       setCameraScene(s.cameraScene);
       setReturnMode(s.returnMode ?? 'camera');
+      setStartHidden(s.startHidden ?? true);
       loaded.current = true;
     });
     return api.onObsStatus?.(setStatus);
   }, [api]);
 
   const save = useCallback(
-    (next: { enabled: boolean; port: string; password?: string; mediaScene: string; cameraScene: string; returnMode: 'camera' | 'previous' }) => {
+    (next: { enabled: boolean; port: string; password?: string; mediaScene: string; cameraScene: string; returnMode: 'camera' | 'previous'; startHidden: boolean }) => {
       const n = parseInt(next.port, 10);
       api?.obsSaveSettings({
         enabled: next.enabled,
@@ -87,6 +89,7 @@ export default function ObsSettings() {
         mediaScene: next.mediaScene,
         cameraScene: next.cameraScene,
         returnMode: next.returnMode,
+        startHidden: next.startHidden,
         ...(next.password !== undefined ? { password: next.password } : {}),
       });
     },
@@ -97,19 +100,20 @@ export default function ObsSettings() {
   useEffect(() => {
     if (!loaded.current) return;
     const id = setTimeout(
-      () => save({ enabled, port, mediaScene, cameraScene, returnMode, ...(password || clearPassword ? { password } : {}) }),
+      () => save({ enabled, port, mediaScene, cameraScene, returnMode, startHidden, ...(password || clearPassword ? { password } : {}) }),
       600
     );
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [port, password, clearPassword]);
 
-  const commit = (patch: Partial<{ enabled: boolean; mediaScene: string; cameraScene: string; returnMode: 'camera' | 'previous' }>) => {
-    const next = { enabled, mediaScene, cameraScene, returnMode, ...patch };
+  const commit = (patch: Partial<{ enabled: boolean; mediaScene: string; cameraScene: string; returnMode: 'camera' | 'previous'; startHidden: boolean }>) => {
+    const next = { enabled, mediaScene, cameraScene, returnMode, startHidden, ...patch };
     if (patch.enabled !== undefined) setEnabled(patch.enabled);
     if (patch.mediaScene !== undefined) setMediaScene(patch.mediaScene);
     if (patch.cameraScene !== undefined) setCameraScene(patch.cameraScene);
     if (patch.returnMode !== undefined) setReturnMode(patch.returnMode);
+    if (patch.startHidden !== undefined) setStartHidden(patch.startHidden);
     save({ ...next, port, ...(password || clearPassword ? { password } : {}) });
   };
 
@@ -252,10 +256,21 @@ export default function ObsSettings() {
           <div className={`text-[11px] ${status?.dock?.running ? 'text-emerald-400' : 'text-red-400'}`}>
             {status?.dock?.running ? '● Dock is running (only while this app is running)' : `● Dock is not running${status?.dock?.error ? `: ${status.dock.error}` : ''}`}
           </div>
-          <p className="text-[11px] text-gray-500">
-            Turning this on also starts the app with Windows, hidden in the tray, so the dock and scene switching are always ready.
-            You can change that under Startup &amp; Schedule.
-          </p>
+          <label className="flex items-start gap-2 cursor-pointer text-xs text-gray-200">
+            <input
+              type="checkbox"
+              checked={startHidden}
+              onChange={(e) => commit({ startHidden: e.target.checked })}
+              className="mt-0.5 accent-emerald-500"
+            />
+            <span>
+              Start hidden in the tray while OBS switching is on
+              <span className="block text-[11px] text-gray-500">
+                On by default, so the dock and scene switching are ready without a window popping up. Turn it off to see the window at every start.
+                Turning OBS switching on also starts the app with Windows (see Startup &amp; Schedule).
+              </span>
+            </span>
+          </label>
         </div>
       )}
     </div>
