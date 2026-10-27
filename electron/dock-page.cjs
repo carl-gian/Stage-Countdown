@@ -112,7 +112,8 @@ const DOCK_HTML = `<!doctype html>
     const st = S.timerState
     badge('t', st === 'running' ? 'ok' : st === 'paused' ? 'warn' : st === 'complete' ? 'accent' : '', S.phase ? 'Working…' : st === 'running' ? 'Running' : st === 'paused' ? 'Paused' : st === 'complete' ? 'Complete' : 'Idle')
     $('mB').hidden = !(S.m3 && S.m3.enabled)
-    if (S.m3 && S.m3.enabled) badge('m', !S.m3.ok ? 'bad' : S.m3.hidden ? 'warn' : 'ok', !S.m3.ok ? 'M³ problem' : S.m3.hidden ? 'M³ hidden' : 'M³ shown')
+    if (S.m3 && S.m3.enabled) badge('m', !S.m3.ok ? 'bad' : S.m3.media === 'shown' ? 'ok' : 'warn',
+      !S.m3.ok ? 'M³ problem' : S.m3.media === 'shown' ? 'M³ showing' : S.m3.media === 'none' ? 'M³ not open' : 'M³ hidden')
     const o = S.obs || {}
     badge('o', o.state === 'connected' ? 'ok' : o.state === 'auth-failed' || o.state === 'error' ? 'bad' : 'warn',
       o.state === 'connected' ? 'OBS connected' : o.state === 'auth-failed' ? 'OBS: wrong password' : 'OBS not detected')

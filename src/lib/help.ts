@@ -71,12 +71,13 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: 'm3',
     title: 'With M³',
-    summary: 'Hide M³\'s media window during the countdown and bring it back after.',
+    summary: 'Hide M³\'s media display during the countdown and bring it back after.',
     sections: [
       {
         paragraphs: [
           'M³ shows media (songs, pictures, videos) on a second screen. The countdown uses that same screen, so Stage Countdown tells M³ to hide its media window, shows the timer there, and then gives the screen back to M³ when the timer ends.',
           'M³ cannot be asked directly. Instead the app sends M³ the same keyboard shortcut you would press: M³\'s "Media Window" shortcut, which opens or closes the media window.',
+          'M³ has two windows. The app watches the one the audience sees, "Media Player - M³", and checks it for real: before and after every shortcut it looks at whether that window is showing, retries once if the shortcut did not work, and shows an error if it still did not. It ignores M³\'s own controller window ("Meeting media - M³").',
         ],
       },
       {
@@ -93,12 +94,19 @@ export const HELP_TOPICS: HelpTopic[] = [
           'Start M³ and open its media window, so that it is showing on the screen you chose.',
           'Press Start. Watch the "M³ media" row on the controller: it says Hidden while the timer is up and Shown again afterwards.',
         ],
-        tip: 'M³\'s shortcut is a toggle that cannot be read back, so the app keeps track of what it did. If you ever change M³\'s window by hand and the row is wrong, press "Fix label" (changes only the label) or "Toggle" (sends the shortcut now).',
+        tip: 'The "M³ media display" row always shows what M³\'s media window is really doing (Showing, Hidden or Not open), refreshed every couple of seconds. "Toggle" sends the shortcut now.',
+      },
+      {
+        heading: 'While the countdown runs',
+        paragraphs: [
+          'From the moment the countdown starts until it ends or you press Stop, the app keeps an eye on M³\'s media display. If it ever comes back on top of the timer (for example M³ shows a song or a picture), the app sends the shortcut again to hide it, and the row says "M³ was showing on top of the timer — hid it again". If you really need M³ on screen, press Stop first.',
+          'When the countdown ends (or you press Stop), the timer window fades to black, closes, and then the shortcut brings M³\'s media display back. The app only brings it back if it was the one that hid it.',
+        ],
       },
       {
         heading: 'If it does not work',
         paragraphs: [
-          'Red text in the "M³ media" row says what failed, for example "window not found" (M³ is not open) or a focus problem. Make sure M³ is open, its title starts with "Meeting media", and the shortcut matches in both programs. The countdown itself always runs, even if M³ could not be reached.',
+          'Red text in the "M³ media display" row says what failed, for example that the media display is still showing after the shortcut was sent. Check that the shortcut matches in both programs, that keyboard shortcuts are switched on in M³, and that M³ is open. The countdown itself always runs, even if M³ could not be reached.',
         ],
       },
     ],

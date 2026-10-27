@@ -13,7 +13,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: '2026-10-27',
     items: [
       'First release. A full-screen stage countdown that works with or without Meeting Media Manager (M³).',
-      'With M³: the countdown hides M³\'s media window, fades in on your stage display, and gives M³ back when it ends.',
+      'With M³: the countdown hides M³\'s media display, fades in on your stage display, and gives it back when it ends. The app checks whether the media display is really showing, verifies every shortcut, and hides it again if it comes back on top while the countdown runs.',
       'Optional OBS scene switching: Zoom participants see the timer (Media Display scene) and then the camera again, with smooth fades.',
       'Optional OBS dock: control the timer from inside OBS (set the time or a clock time, start, pause, stop).',
       'Lives in the tray: closing or minimizing the window keeps it running; it starts hidden with Windows when OBS switching is on.',

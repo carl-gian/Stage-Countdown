@@ -4,7 +4,10 @@ const DEFAULT_SHORTCUT = { ctrl: false, alt: true, shift: true, code: 'F3' };
 
 const DEFAULT_CONFIG = {
   lastDisplayId: null,
+  // M3 has two windows: its own controller ("Meeting media - M3", only brought forward so the shortcut reaches it)
+  // and the MEDIA window ("Media Player - M3") that covers the stage, which is the one we detect.
   m3WindowTitle: 'Meeting media - M',
+  m3MediaWindowTitle: 'Media Player - M',
   hideShortcut: DEFAULT_SHORTCUT,
   visual: null,
   startMinimized: false,

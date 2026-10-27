@@ -25,6 +25,8 @@ function safeLoadVisualSettings(): VisualSettings {
 interface M3Status {
   ok: boolean;
   enabled?: boolean;
+  media?: 'shown' | 'hidden' | 'none' | 'unknown';
+  note?: string;
   hidden: boolean;
   error?: string;
 }
@@ -161,6 +163,8 @@ function ControllerView() {
 
   useEffect(() => {
     window.electronAPI?.getM3State?.().then(applyM3).catch(() => {});
+    // The real state of M³'s media window, read by the app every couple of seconds (also catches changes made by hand).
+    return window.electronAPI?.onM3Status?.(applyM3);
   }, [applyM3]);
 
   useEffect(() => {
@@ -250,6 +254,8 @@ function ControllerView() {
         // Invisible until the curtain comes on; never takes focus from M3.
         await window.electronAPI?.openStageWindow?.();
         applyM3(await window.electronAPI?.triggerShortcut?.());
+        // From here until the hand-back, keep M³'s media display hidden: if it comes back on top, hide it again.
+        window.electronAPI?.setM3Guard?.(true);
 
         await delay(s.blackAfterShortcutMs);
         setPhase({ kind: 'starting', until: Date.now() + START_LEAD_MS - s.blackAfterShortcutMs });
@@ -315,17 +321,21 @@ function ControllerView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer.state, runStartSequence]);
 
-  /** Shared tail of END and STOP: black -> show M3 (on top of us) -> close our window behind it. */
+  /**
+   * Shared tail of END and STOP: the timer window fades to black -> it is closed -> the shortcut brings M³'s
+   * media display back (verified by the app). Returns when the shortcut was sent.
+   */
   const handBackToM3 = useCallback(
-    async (fadeMs: number, closeAfterMs: number) => {
-      setCurtain({ on: true, ms: fadeMs });
-      await delay(fadeMs);
-      applyM3(await window.electronAPI?.selectAndSignalM3?.());
-      const shortcutAt = Date.now();
-      await delay(closeAfterMs);
+    async (t: { fadeToBlackMs: number; closeAfterFadeMs: number; shortcutAfterCloseMs: number }) => {
+      window.electronAPI?.setM3Guard?.(false); // from now on M³ is SUPPOSED to come back
+      setCurtain({ on: true, ms: t.fadeToBlackMs });
+      await delay(t.fadeToBlackMs + t.closeAfterFadeMs);
       await window.electronAPI?.closeStageWindow?.();
       setStageShowsTimer(false);
       setCurtain({ on: false, ms: 0 });
+      await delay(t.shortcutAfterCloseMs);
+      const shortcutAt = Date.now();
+      applyM3(await window.electronAPI?.selectAndSignalM3?.());
       return shortcutAt;
     },
     [applyM3]
@@ -344,7 +354,7 @@ function ControllerView() {
         setTimeout(() => obsSwitch('camera', SEQUENCE.obs.cameraFadeMs), SEQUENCE.obs.cameraDelayAfterEndMs);
         await skippableDelay(e.holdZeroMs);
         setPhase({ kind: 'returning' });
-        shortcutAt = await handBackToM3(e.fadeToBlackMs, e.closeAfterShortcutMs);
+        shortcutAt = await handBackToM3(e);
       } finally {
         busyRef.current = false;
         setPhase(null);
@@ -392,13 +402,13 @@ function ControllerView() {
     try {
       setPhase({ kind: 'stopping' });
       cancelPendingObsMedia();
-      obsSwitch('camera', SEQUENCE.obs.cameraFadeMs);
+      obsSwitch('camera', SEQUENCE.obs.cameraFadeOnStopMs);
       if (autoClose) setPendingCloseReconfirm(true);
       timer.stop();
       setStageShowsTimer(false); // timer fades out while the curtain fades in
       setTargetTimeMode(false);
       setTargetTimeValue('');
-      await handBackToM3(SEQUENCE.stop.fadeToBlackMs, SEQUENCE.stop.closeAfterShortcutMs);
+      await handBackToM3(SEQUENCE.stop);
     } finally {
       busyRef.current = false;
       setPhase(null);
@@ -422,10 +432,6 @@ function ControllerView() {
       setPhase(null);
     }
   }, [applyM3]);
-
-  const handleFlipM3Label = useCallback(async () => {
-    applyM3(await window.electronAPI?.setM3State?.(!m3.hidden));
-  }, [m3.hidden, applyM3]);
 
   const handleTargetTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -513,7 +519,7 @@ function ControllerView() {
       endsAt: timer.endsAt,
       phase,
       quitAt,
-      m3: { enabled: m3.enabled !== false, hidden: m3.hidden, ok: m3.ok, error: m3.error },
+      m3: { enabled: m3.enabled !== false, media: m3.media, hidden: m3.hidden, ok: m3.ok, error: m3.error, note: m3.note },
       autoClose,
       clock24h: visual.clock24h,
     });
@@ -571,7 +577,7 @@ function ControllerView() {
             <UpdateBadge update={update} />
           )}
           {m3.enabled !== false && (
-            <M3StatusRow status={m3} busy={busy} onToggle={handleToggleM3} onFlip={handleFlipM3Label} />
+            <M3StatusRow status={m3} busy={busy} onToggle={handleToggleM3} />
           )}
           {obsStatus?.enabled && <ObsStatusRow status={obsStatus} note={obsNote} />}
         </div>
@@ -818,38 +824,27 @@ function UpdateBadge({ update }: { update: UpdateInfo }) {
   );
 }
 
-function M3StatusRow({
-  status,
-  busy,
-  onToggle,
-  onFlip,
-}: {
-  status: M3Status;
-  busy: boolean;
-  onToggle: () => void;
-  onFlip: () => void;
-}) {
+function M3StatusRow({ status, busy, onToggle }: { status: M3Status; busy: boolean; onToggle: () => void }) {
+  const label =
+    status.media === 'shown' ? { text: 'Showing', cls: 'text-emerald-400' }
+    : status.media === 'none' ? { text: 'Not open', cls: 'text-gray-400' }
+    : status.media === 'hidden' ? { text: 'Hidden', cls: 'text-amber-400' }
+    : status.hidden ? { text: 'Hidden (assumed)', cls: 'text-amber-400' }
+    : { text: 'Showing (assumed)', cls: 'text-emerald-400' };
   return (
     <div className="flex items-center gap-2 bg-black/70 backdrop-blur border border-white/10 rounded-lg px-2 py-1.5 shadow-lg">
-      <span className="text-xs text-gray-300 flex-1 min-w-0 truncate" title={status.error}>
-        M³ media: <b className={status.hidden ? 'text-amber-400' : 'text-emerald-400'}>{status.hidden ? 'Hidden' : 'Shown'}</b>
+      <span className="text-xs text-gray-300 flex-1 min-w-0 truncate" title={status.error ?? status.note}>
+        M³ media display: <b className={label.cls}>{label.text}</b>
+        {status.note && <span className="text-amber-300"> · {status.note}</span>}
         {!status.ok && <span className="text-red-400"> · {status.error ?? 'could not reach M³'}</span>}
       </span>
       <button
         onClick={onToggle}
         disabled={busy}
-        title="Send M³'s hide/show shortcut now"
+        title="Send M³'s Media Window shortcut now (shows it if hidden, hides it if showing)"
         className="px-2 py-1 rounded text-xs font-semibold bg-white/10 text-white hover:bg-white/20 disabled:opacity-30"
       >
         Toggle
-      </button>
-      <button
-        onClick={onFlip}
-        disabled={busy}
-        title="Only fix this label (use if M³ was changed by hand); sends nothing"
-        className="px-2 py-1 rounded text-xs font-semibold bg-white/5 text-gray-300 hover:bg-white/10 disabled:opacity-30"
-      >
-        Fix label
       </button>
     </div>
   );

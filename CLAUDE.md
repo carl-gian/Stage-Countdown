@@ -18,17 +18,22 @@ countdown on a stage display and hides/shows the **Meeting Media Manager (M³)**
 
 ---
 
-## 1. How M³ is controlled
+## 1. How M³ is controlled (electron/m3.cjs, tested against a simulated M³ in tests/m3.test.ts)
 
-There is no data link to M³. The app:
-1. Focuses M³'s window (title contains `m3WindowTitle`, default `Meeting media - M`) through a **resident PowerShell worker**
-   (`PS_SCRIPT` in `electron/main.cjs`: compiled once at app start, commands are `id|focus|…` / `id|key|…` lines). Focus is
-   **verified** (`GetForegroundWindow`, up to 3 tries); if it fails, no hotkey is sent and the UI shows the error.
-2. Sends M³'s hide/show hotkey with `keybd_event` (default Shift+Alt+F3, set in Settings, stored as `hideShortcut`).
+M³ has TWO windows: the MEDIA window **"Media Player - M³"** (audience-facing, covers the stage: this is the one we detect;
+`config.m3MediaWindowTitle` = `Media Player - M`) and its own controller **"Meeting media - M³"** (`m3WindowTitle`: only brought
+forward, best effort, so the keyboard shortcut reaches M³; never used to decide whether M³ is showing).
 
-M³'s hotkey is a **toggle that cannot be read back**, so main tracks `m3Hidden`. Start only hides if it believes M³ is
-shown; end/stop only restore if it believes M³ is hidden. The controller shows "M³ media: Shown/Hidden" with **Toggle** (send the
-hotkey) and **Fix label** (correct the belief without sending anything). Closing the controller while M³ is hidden restores it first.
+M³'s "Media Window" shortcut is a TOGGLE, so we never trust a remembered state:
+- The resident PowerShell worker (`PS_SCRIPT` in `main.cjs`) answers `state|<title>` with `shown | hidden | none` by reading the real
+  window (visible, not minimized, not faded to ~0 opacity; hidden windows still count as existing).
+- `hide()`: if showing, send the shortcut, wait for it to actually hide, retry once, else report an error. `show()`: only if WE hid it
+  (`needsRestore`), verified, retry once. `toggle()` flips whatever is on screen. All serialized in one queue.
+- **Guard:** `m3-guard` on = every 1.5 s re-read the state and, if the media display is showing, send the shortcut again (note shown in
+  the row). On from the first hide until the hand-back begins (App.tsx).
+- A 2 s background refresh keeps the "M³ media display: Showing/Hidden/Not open" row truthful (also after changes made by hand).
+- Only if the state cannot be read (non-Windows, worker down) does it fall back to the old remembered toggle ("(assumed)").
+- Closing the controller while we hold M³ hidden restores it first. `m3.enabled = false` = standalone: nothing is read or sent.
 
 ## 2. Sequences (src/App.tsx) — owner-specified timings, all in `src/lib/sequence.ts`
 
@@ -37,17 +42,17 @@ if you change one on purpose (owner's request only), update the test too.
 
 | Event | Steps |
 |---|---|
-| Start (manual / scheduled / Countdown to Time) | stage window opened invisibly → **shortcut** (hide M³) → +500 ms stage goes black (300 ms fade) → black for 1000 ms → 1000 ms transition to the timer showing the full time → 2000 ms → counting starts (4.5 s after the shortcut) |
-| Complete | 00:00 held **10 s** (heartbeat at the start; "Back to M³ now" skips) → 500 ms fade to black → **shortcut** (show M³) → 500 ms → stage window closed (M³'s media window is already on top of it) |
-| Auto-close | if "Close StageCountdown after Timer ends" is on: the app quits **5 s after the end shortcut**; the button shows "Closing in Ns · click to cancel" |
-| OBS (optional) | counting starts → +1000 ms → OBS fades to the Media Display scene (1200 ms); timer ends → OBS fades to the Camera scene (2000 ms) while the room still sees the 00:00 hold; Stop cancels a pending media switch and goes to Camera |
-| Stop | timer fades out with 500 ms fade to black → **shortcut** → 500 ms → stage window closed (never quits) |
+| Start (manual / scheduled / Countdown to Time) | stage window opened invisibly → **shortcut** (hide M³, verified; guard on) → +500 ms stage goes black (300 ms fade) → black for 1000 ms → 1000 ms transition to the timer showing the full time → 2000 ms → counting starts (4.5 s after the shortcut) |
+| Complete | 00:00 held **10 s** (heartbeat at the start; "Back to M³ now" skips) → HAND-BACK |
+| Stop | stop timer → HAND-BACK straight away; OBS (optional) fades to Camera over **500 ms** |
+| HAND-BACK (end and stop) | guard off → timer window fades to black (500 ms) → timer window **closed** → +100 ms → **shortcut** (show M³, verified) |
+| Auto-close | if "Close StageCountdown after Timer ends" is on: the app quits **5 s after that shortcut**; the button shows "Closing in Ns · click to cancel" |
 | Restart while paused | restarts in place (stage already up, M³ already hidden) — no sequence |
 
 "Countdown to Time" is sized when counting actually begins, so it still ends exactly on the target.
 Stacking: our stage window is always-on-top at the default "floating" level; M³'s fullscreen media window uses
-"screen-saver", which is higher — that is why M³ appears over our black window at the end. The stage window is
-non-focusable, ignores the mouse and is not in the taskbar.
+"screen-saver", which is higher — so if M³'s media display is showing it covers the timer (that is what the guard prevents).
+The stage window is non-focusable, ignores the mouse and is not in the taskbar.
 
 The clock is wall-time (`endsAt = Date.now() + ms`) driven by timers, not rAF, and both windows have `backgroundThrottling:
 false`, so it keeps running when minimized. The stage gets `{state, totalMs, remainingMs, endsAt, visual, blackout}` only when

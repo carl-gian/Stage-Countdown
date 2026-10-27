@@ -79,10 +79,15 @@ shortcut you would press: M³'s **Media Window** shortcut (open/close the media 
 2. In **Stage Countdown**: *Settings → Meeting Media Manager (M³)* → make sure the switch is on, then click the **Shortcut** box and press the same combination.
 3. Open M³ and its media window on the display you chose, then press **Start**.
 
-The controller shows **M³ media: Shown / Hidden**. M³'s shortcut is a toggle that can't be read back, so the app keeps track of what it
-did and only hides when it believes M³ is shown (and the reverse). If you change M³'s window by hand and the label is wrong, press
-**Fix label** (changes only the label) or **Toggle** (sends the shortcut now). If M³ can't be reached the red message says why and the
-countdown still runs. Closing the app while M³ is hidden brings M³ back first.
+M³ has two windows. The app watches **"Media Player - M³"**, the media display the audience sees, and ignores M³'s own controller
+window ("Meeting media - M³"). The controller shows **M³ media display: Showing / Hidden / Not open**, read for real every couple of seconds.
+
+- **Verified:** before and after every shortcut the app checks whether the media display is actually showing, retries once if the
+  shortcut didn't work, and shows a red message if it still didn't. It only brings M³ back if it was the one that hid it.
+- **Guard while a countdown runs:** if M³'s media display ever comes back on top of the timer, the app sends the shortcut again to hide it
+  ("M³ was showing on top of the timer — hid it again"). To really show M³ mid-countdown, press **Stop** first.
+- **Toggle** sends the shortcut right now (shows it if hidden, hides it if showing).
+- If M³ can't be reached the countdown still runs. Closing the app while it has M³ hidden brings M³ back first.
 
 ---
 
@@ -142,7 +147,7 @@ All timings live in one file, [`src/lib/sequence.ts`](src/lib/sequence.ts), and 
 
 | Time | What happens |
 |---|---|
-| 0 s | M³'s shortcut is sent (hides M³'s media window) |
+| 0 s | M³'s shortcut is sent (hides M³'s media display, verified; from now on the guard keeps it hidden) |
 | +0.5 s | The stage screen fades to black |
 | +1.5 s | Black has been held for 1 s |
 | +1.5 s → +2.5 s | 1 s transition to the timer display, showing the full time (not counting) |
@@ -154,12 +159,13 @@ All timings live in one file, [`src/lib/sequence.ts`](src/lib/sequence.ts), and 
 | Time | What happens |
 |---|---|
 | 0 s | `00:00`, a heartbeat pulse. *(OBS on)* OBS starts its 2 s fade to the Camera scene |
-| +10 s | *(or press **Back to M³ now**)* the stage screen fades to black (0.5 s) |
-| +10.5 s | M³'s shortcut is sent (M³'s media window comes back on top of the black screen) |
-| +11 s | The countdown window closes behind M³ |
-| +15.5 s | If **Close Stage Countdown after timer ends** is on, the app quits (the button counts down; click it to cancel) |
+| +10 s | *(or press **Back to M³ now**)* the timer window fades to black (0.5 s) |
+| +10.5 s | The countdown window closes |
+| +10.6 s | M³'s shortcut is sent, and the app checks that M³'s media display really came back |
+| +15.6 s | If **Close Stage Countdown after timer ends** is on, the app quits (the button counts down; click it to cancel) |
 
-**Stop** is the same as the end without the 10-second hold, and never quits the app.
+**Stop** hands back the same way, straight away and without the 10-second hold: the timer window fades to black (0.5 s) while *(OBS on)* OBS fades to the
+Camera scene (0.5 s), the window closes, then M³'s shortcut is sent. Stop never quits the app.
 
 ---
 
@@ -205,7 +211,7 @@ Settings are saved in `Documents\Stage Countdown Settings\config.txt`. Logs are 
 | Problem | What to check |
 |---|---|
 | Nothing on the stage screen | *Settings → Display*. If you only have one screen, pick it explicitly. |
-| M³ doesn't hide/show | The shortcut must be identical in both apps; M³ must be open with keyboard shortcuts enabled. The red message in the **M³ media** row names the problem. |
+| M³ doesn't hide/show, or is on top of the timer | The shortcut must be identical in both apps; M³ must be open with keyboard shortcuts enabled. The **M³ media display** row shows what M³ is really doing and a red message names the problem. During a countdown the app hides M³ again by itself. |
 | "OBS not detected" | OBS must be open with *Tools → WebSocket Server Settings → Enable* on, same port and password. Press **Refresh** in Settings. |
 | "Wrong password" | Re-enter the OBS WebSocket password in Settings. |
 | The dock says "App not responding" | Stage Countdown isn't running, or OBS WebSocket/dock port 4578 is blocked; check *Settings → OBS Scene Switching → Dock is running*. |

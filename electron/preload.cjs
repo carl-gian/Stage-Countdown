@@ -27,7 +27,8 @@ const api = {
   selectAndSignalM3: () => ipcRenderer.invoke('select-and-signal-m3'), // restore M3 (no-op if shown)
   toggleM3: () => ipcRenderer.invoke('toggle-m3'),
   getM3State: () => ipcRenderer.invoke('get-m3-state'),
-  setM3State: (hidden) => ipcRenderer.invoke('set-m3-state', hidden),
+  setM3Guard: (on) => ipcRenderer.invoke('m3-guard', on),
+  onM3Status: (cb) => subscribe('m3-status', cb),
 
   // App info, auto-update, help, dock. (Events return their unsubscribe function.)
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),

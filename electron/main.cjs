@@ -7,6 +7,7 @@ const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, sealSecret, o
 const { createObs } = require('./obs.cjs');
 const { createDock } = require('./dock.cjs');
 const { createUpdater } = require('./updater.cjs');
+const { createM3 } = require('./m3.cjs');
 
 app.setAppUserModelId('com.stagecountdown.app'); // Windows notifications + taskbar identity
 
@@ -287,6 +288,48 @@ public class W {
 }
 "@
 
+# Window STATE lives in its own block: if it ever failed to compile, focus and keystrokes would still work and
+# the app would fall back to its remembered-toggle behaviour instead of losing M3 control completely.
+$hasState = $true
+try {
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class W2 {
+  delegate bool EP2(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EP2 cb, IntPtr l);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int idx);
+  [DllImport("user32.dll")] static extern bool GetLayeredWindowAttributes(IntPtr h, out uint key, out byte alpha, out uint flags);
+
+  // The REAL state of a window whose title contains "part": shown | hidden | none (no such window).
+  // Hidden windows are included in the search (Electron hide() keeps the window). A window that is
+  // visible but faded to almost no opacity (M3 fades out before hiding) counts as hidden.
+  public static string State(string part) {
+    bool any = false;
+    bool shown = false;
+    EnumWindows(delegate(IntPtr h, IntPtr l) {
+      StringBuilder sb = new StringBuilder(256);
+      GetWindowText(h, sb, 256);
+      if (sb.ToString().IndexOf(part, StringComparison.OrdinalIgnoreCase) < 0) return true;
+      any = true;
+      if (!IsWindowVisible(h) || IsIconic(h)) return true;
+      if ((GetWindowLong(h, -20) & 0x80000) != 0) {
+        uint key; byte alpha; uint flags;
+        if (GetLayeredWindowAttributes(h, out key, out alpha, out flags) && (flags & 2) != 0 && alpha < 8) return true;
+      }
+      shown = true;
+      return false;
+    }, IntPtr.Zero);
+    return !any ? "none" : shown ? "shown" : "hidden";
+  }
+}
+"@
+} catch { $hasState = $false }
+
 function Send-Key($vk, $alt, $shift, $ctrl) {
   if ($shift) { [W]::keybd_event(0x10, 0, 0, [UIntPtr]::Zero) }
   if ($alt)   { [W]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero) }
@@ -308,6 +351,7 @@ while ($true) {
   try {
     switch ($p[1]) {
       'focus' { $r = [W]::Focus($p[2]) }
+      'state' { if ($hasState) { $r = [W2]::State($p[2]) } else { $r = 'FAIL nostate' } }
       'key'   { Send-Key ([int]$p[2]) ($p[3] -eq '1') ($p[4] -eq '1') ($p[5] -eq '1'); $r = 'OK' }
       default { $r = 'FAIL unknown' }
     }
@@ -394,45 +438,15 @@ async function psSend(command, timeoutMs = 4000) {
   });
 }
 
-// --- M3 HIDE/SHOW -----------------------------------------------------------
-// M3's hotkey is a toggle and there is no way to read its state, so we track
-// what we last did. Start only hides if we believe it is shown; end/stop only
-// restores if we believe it is hidden, so a failed or doubled call can't invert it.
-let m3Hidden = false;
-
-const m3Enabled = () => loadConfig().m3.enabled !== false;
-const m3Result = (ok, error) => ({ ok, enabled: m3Enabled(), hidden: m3Hidden, ...(error ? { error } : {}) });
-
-async function sendM3Hotkey() {
-  const cfg = loadConfig();
-  const focus = await psSend(`focus|${cfg.m3WindowTitle}`);
-  if (focus !== 'OK') {
-    log.error('[m3] focus failed:', focus);
-    return focus === 'FAIL nowindow' ? 'Meeting Media Manager window not found - is it open?' : `Could not focus M3 (${focus})`;
-  }
-  await delay(200);
-  const k = shortcutToKeys(cfg.hideShortcut);
-  const key = await psSend(`key|${k.vkCode}|${+k.hasAlt}|${+k.hasShift}|${+k.hasCtrl}`);
-  // Returns as soon as the key is sent: every wait after it lives in src/lib/sequence.ts.
-  if (key !== 'OK') {
-    log.error('[m3] hotkey failed:', key);
-    return `Could not send the shortcut (${key})`;
-  }
-  return null;
-}
-
-async function setM3Hidden(target) {
-  // Standalone mode (no M3): nothing to hide or show and no shortcut is ever sent.
-  if (!m3Enabled()) {
-    m3Hidden = false;
-    return m3Result(true);
-  }
-  if (m3Hidden === target) return m3Result(true);
-  const error = await sendM3Hotkey();
-  if (error) return m3Result(false, error);
-  m3Hidden = target;
-  return m3Result(true);
-}
+// --- M3 HIDE/SHOW (see electron/m3.cjs) -------------------------------------
+// Reads the REAL state of M3's media window ("Media Player - M3") instead of trusting a remembered toggle, verifies
+// every shortcut, and while a countdown runs a guard hides it again if it comes back on top of the timer.
+const m3 = createM3({
+  ps: (command, timeoutMs) => psSend(command, timeoutMs),
+  getConfig: loadConfig,
+  log: (...a) => log.info(...a),
+  onStatus: (status) => sendToController('m3-status', status),
+});
 
 // --- WINDOWS ----------------------------------------------------------------
 function getWindowUrl(route = '') {
@@ -476,10 +490,6 @@ function createWindow(startHidden = false) {
   controllerWindow.loadURL(getWindowUrl());
 
   // Never leave M3's media hidden: if we hid it, bring it back before closing.
-  // Closing OR minimizing hides the window to the tray (it also leaves the taskbar); the tray icon brings it back.
-  // Only "Quit" really closes it.
-  controllerWindow.on('minimize', () => controllerWindow.hide());
-
   controllerWindow.on('close', (event) => {
     if (!quitting) {
       event.preventDefault();
@@ -489,10 +499,11 @@ function createWindow(startHidden = false) {
     if (closingRestore) return;
     // Also put OBS back on the camera scene if we left it on the media scene.
     const obsBack = obs.restoreCameraIfNeeded();
-    if (m3Hidden || obs.status().state === 'connected') {
+    m3.stopGuard();
+    if (m3.needsRestore() || obs.status().state === 'connected') {
       event.preventDefault();
       closingRestore = true;
-      Promise.all([m3Hidden ? setM3Hidden(false) : null, obsBack]).finally(() => {
+      Promise.all([m3.needsRestore() ? m3.show() : null, obsBack]).finally(() => {
         if (controllerWindow && !controllerWindow.isDestroyed()) controllerWindow.close();
       });
     }
@@ -587,7 +598,10 @@ app.whenReady().then(() => {
   applyObsConfig();
   syncDock();
   updater.start();
-  if (process.platform === 'win32') ensurePs(); // compile the helper now, not on the first Start
+  if (process.platform === 'win32') {
+    ensurePs(); // compile the helper now, not on the first Start
+    m3.startPolling(); // keeps the "M3 media" row truthful, even if M3 is changed by hand
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -603,6 +617,7 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
+  m3.dispose();
   obs.dispose();
   dock.stop();
   updater.stop();
@@ -645,22 +660,17 @@ ipcMain.handle('open-stage-window', async () => {
   return true;
 });
 
-// trigger-shortcut = hide M3 (start); select-and-signal-m3 = restore M3 (end/stop).
-ipcMain.handle('trigger-shortcut', () => setM3Hidden(true));
-ipcMain.handle('select-and-signal-m3', () => setM3Hidden(false));
-ipcMain.handle('toggle-m3', () => setM3Hidden(!m3Hidden));
-ipcMain.handle('get-m3-state', () => m3Result(true));
-// Correct the assumed state without sending anything (M3 was changed by hand).
-ipcMain.handle('set-m3-state', (_event, hidden) => {
-  m3Hidden = !!hidden;
-  return m3Result(true);
+// trigger-shortcut = hide M3's media display (start); select-and-signal-m3 = bring it back (end/stop).
+ipcMain.handle('trigger-shortcut', () => m3.hide());
+ipcMain.handle('select-and-signal-m3', () => m3.show());
+ipcMain.handle('toggle-m3', () => m3.toggle());
+ipcMain.handle('get-m3-state', () => m3.refresh());
+// While a countdown runs: keep M3's media display hidden (re-sends the shortcut if it comes back on top).
+ipcMain.handle('m3-guard', (_event, on) => {
+  if (on) m3.startGuard();
+  else m3.stopGuard();
+  return true;
 });
-
-// The renderer never receives (or sets) the sealed OBS password through the generic config calls.
-const publicConfig = () => {
-  const { obsPasswordEnc, ...rest } = loadConfig();
-  return { ...rest, obs: { ...rest.obs, hasPassword: !!obsPasswordEnc } };
-};
 
 ipcMain.handle('get-config', () => publicConfig());
 
@@ -668,6 +678,7 @@ ipcMain.handle('set-config', (_event, patch) => {
   const { obsPasswordEnc: _ignored, obs: _obs, ...safe } = patch || {};
   const next = saveConfig(safe);
   if (patch && 'autoLaunch' in patch) applyLoginItem();
+  if (patch && 'm3' in patch) m3.refresh().catch(() => {});
   return publicConfig();
 });
 

@@ -8,6 +8,10 @@ interface DisplayInfo {
 
 interface M3Status {
   ok: boolean;
+  /** What M³'s MEDIA window ("Media Player - M³") is doing right now. */
+  media?: 'shown' | 'hidden' | 'none' | 'unknown';
+  /** A short, temporary message, e.g. when the guard had to hide M³ again. */
+  note?: string;
   /** False when the M³ hand-off is switched off (standalone countdown). */
   enabled?: boolean;
   hidden: boolean;
@@ -72,7 +76,9 @@ interface Window {
     selectAndSignalM3: () => Promise<M3Status>;
     toggleM3: () => Promise<M3Status>;
     getM3State: () => Promise<M3Status>;
-    setM3State: (hidden: boolean) => Promise<M3Status>;
+    /** While a countdown runs: keep M³'s media display hidden (the app re-sends the shortcut if it comes back). */
+    setM3Guard: (on: boolean) => Promise<boolean>;
+    onM3Status: (callback: (status: M3Status) => void) => () => void;
     getAppInfo: () => Promise<AppInfo>;
     ackVersion: () => Promise<boolean>;
     updateGetStatus: () => Promise<UpdateInfo>;
