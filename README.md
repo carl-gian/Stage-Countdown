@@ -80,7 +80,7 @@ shortcut you would press: M³'s **Media Window** shortcut (open/close the media 
 3. Open M³ and its media window on the display you chose, then press **Start**.
 
 M³ has two windows. The app watches **"Media Player - M³"**, the media display the audience sees, and ignores M³'s own controller
-window ("Meeting media - M³"). The controller shows **M³ media display: Showing / Hidden / Not open**, read for real every couple of seconds.
+window ("Meeting media - M³"). The controller (and the OBS dock) show **M³ Media Display Shown** or **M³ Media Display Hidden**, read for real every couple of seconds.
 
 - **Verified:** before and after every shortcut the app checks whether the media display is actually showing, retries once if the
   shortcut didn't work, and shows a red message if it still didn't. It only brings M³ back if it was the one that hid it.
@@ -214,7 +214,7 @@ Settings are saved in `Documents\Stage Countdown Settings\config.txt`. Logs are 
 | Problem | What to check |
 |---|---|
 | Nothing on the stage screen | *Settings → Display*. If you only have one screen, pick it explicitly. |
-| M³ doesn't hide/show, or is on top of the timer | The shortcut must be identical in both apps; M³ must be open with keyboard shortcuts enabled. The **M³ media display** row shows what M³ is really doing and a red message names the problem. During a countdown the app hides M³ again by itself. |
+| M³ doesn't hide/show, or is on top of the timer | The shortcut must be identical in both apps; M³ must be open with keyboard shortcuts enabled. The **M³ Media Display** badge shows what M³ is really doing and a red message names the problem. During a countdown the app hides M³ again by itself. |
 | "OBS not detected" | OBS must be open with *Tools → WebSocket Server Settings → Enable* on, same port and password. Press **Refresh** in Settings. |
 | "Wrong password" | Re-enter the OBS WebSocket password in Settings. |
 | The dock says "App not responding" | Stage Countdown isn't running, or OBS WebSocket/dock port 4578 is blocked; check *Settings → OBS Scene Switching → Dock is running*. |

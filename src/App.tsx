@@ -8,6 +8,7 @@ import WhatsNewModal from '@/components/WhatsNewModal';
 import { useCountdownTimer, saveVisualSettings } from '@/hooks/useCountdownTimer';
 import { DEFAULT_VISUAL_SETTINGS, mergeVisual, type StageState, type VisualSettings } from '@/types';
 import { nextOccurrence } from '@/lib/time';
+import { m3Label, M3_BADGE_PREFIX } from '@/lib/m3label';
 import { SEQUENCE, START_LEAD_MS } from '@/lib/sequence';
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -835,16 +836,15 @@ function UpdateBadge({ update }: { update: UpdateInfo }) {
 }
 
 function M3StatusRow({ status, busy, onToggle }: { status: M3Status; busy: boolean; onToggle: () => void }) {
-  const label =
-    status.media === 'shown' ? { text: 'Showing', cls: 'text-emerald-400' }
-    : status.media === 'none' ? { text: 'Not open', cls: 'text-gray-400' }
-    : status.media === 'hidden' ? { text: 'Hidden', cls: 'text-amber-400' }
-    : status.hidden ? { text: 'Hidden (assumed)', cls: 'text-amber-400' }
-    : { text: 'Showing (assumed)', cls: 'text-emerald-400' };
+  const label = m3Label(status);
+  const cls = label.word === 'Shown' ? 'text-emerald-400' : 'text-amber-400';
   return (
     <div className="flex items-center gap-2 bg-black/70 backdrop-blur border border-white/10 rounded-lg px-2 py-1.5 shadow-lg">
-      <span className="text-xs text-gray-300 flex-1 min-w-0 truncate" title={status.error ?? status.note}>
-        M³ media display: <b className={label.cls}>{label.text}</b>
+      <span
+        className="text-xs text-gray-300 flex-1 min-w-0 truncate"
+        title={status.error ?? status.note ?? (label.guessed ? "Best guess: M³'s window could not be read" : undefined)}
+      >
+        {M3_BADGE_PREFIX} <b className={cls}>{label.word}</b>
         {status.note && <span className="text-amber-300"> · {status.note}</span>}
         {!status.ok && <span className="text-red-400"> · {status.error ?? 'could not reach M³'}</span>}
       </span>

@@ -94,7 +94,7 @@ export const HELP_TOPICS: HelpTopic[] = [
           'Start M³ and open its media window, so that it is showing on the screen you chose.',
           'Press Start. Watch the "M³ media" row on the controller: it says Hidden while the timer is up and Shown again afterwards.',
         ],
-        tip: 'The "M³ media display" row always shows what M³\'s media window is really doing (Showing, Hidden or Not open), refreshed every couple of seconds. "Toggle" sends the shortcut now.',
+        tip: 'The "M³ Media Display" badge always shows what M³\'s media window is really doing (Shown or Hidden), refreshed every couple of seconds. "Toggle" sends the shortcut now.',
       },
       {
         heading: 'While the countdown runs',
@@ -107,7 +107,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         heading: 'If it does not work',
         paragraphs: [
-          'Red text in the "M³ media display" row says what failed, for example that the media display is still showing after the shortcut was sent. Check that the shortcut matches in both programs, that keyboard shortcuts are switched on in M³, and that M³ is open. The countdown itself always runs, even if M³ could not be reached.',
+          'Red text next to the "M³ Media Display" badge says what failed, for example that the media display is still showing after the shortcut was sent. Check that the shortcut matches in both programs, that keyboard shortcuts are switched on in M³, and that M³ is open. The countdown itself always runs, even if M³ could not be reached.',
         ],
       },
     ],

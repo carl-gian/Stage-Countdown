@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.3',
+    date: '2026-10-28',
+    items: [
+      'Fixed: the glow around the progress ring was cut off in a square, on the controller, the stage display and the previews. It now fades out smoothly all the way around.',
+      'The M³ badge now simply reads "M³ Media Display Shown" or "M³ Media Display Hidden", in the app and in the OBS dock.',
+    ],
+  },
+  {
     version: '1.0.2',
     date: '2026-10-27',
     items: [

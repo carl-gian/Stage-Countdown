@@ -31,7 +31,7 @@ M³'s "Media Window" shortcut is a TOGGLE, so we never trust a remembered state:
   (`needsRestore`), verified, retry once. `toggle()` flips whatever is on screen. All serialized in one queue.
 - **Guard:** `m3-guard` on = every 1.5 s re-read the state and, if the media display is showing, send the shortcut again (note shown in
   the row). On from the first hide until the hand-back begins (App.tsx).
-- A 2 s background refresh keeps the "M³ media display: Showing/Hidden/Not open" row truthful (also after changes made by hand).
+- A 2 s background refresh keeps the "M³ Media Display Shown / Hidden" badge truthful (also after changes made by hand). The wording lives in `src/lib/m3label.ts` (tested); "not open" counts as Hidden.
 - Only if the state cannot be read (non-Windows, worker down) does it fall back to the old remembered toggle ("(assumed)").
 - Closing the controller while we hold M³ hidden restores it first. `m3.enabled = false` = standalone: nothing is read or sent.
 

@@ -47,7 +47,7 @@ In OBS: Tools -> WebSocket Server Settings -> enable (note port and password). M
 - [ ] Updates: install an older version, publish a newer one: within a few seconds of the next start the blue "Update ready" badge appears in the app AND the dock, with a Windows notification; clicking it asks first; after restart "What's new" shows once. The portable build says it cannot update itself.
 
 ## M³ media display detection and the new hand-back order
-- [ ] With M³'s media window open and showing, the "M³ media display" row says **Showing**; hide M³'s media window by hand: within ~2 s it says **Hidden**; close it: **Not open**.
+- [ ] With M³'s media window open and showing, the badge says **M³ Media Display Shown**; hide M³'s media window by hand: within ~2 s it says **M³ Media Display Hidden** (closing it also says Hidden).
 - [ ] Start: M³'s media display hides (row turns Hidden) and the timer appears on that screen. Nothing of M³ is visible on top.
 - [ ] While the timer is RUNNING (and while paused): bring M³'s media display back by hand (or let M³ show media). Within ~1.5-3 s it is hidden again and the row says "M³ was showing on top of the timer — hid it again".
 - [ ] Press **Stop** mid-count: the timer window fades to black over 0.5 s (OBS, if on, fades to the Camera scene over 0.5 s), the window closes, then M³'s media display comes back. No desktop flash that lasts more than a blink.
