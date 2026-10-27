@@ -1,6 +1,6 @@
-# Stage Countdown 1.0.0
+# Stage Countdown 1.0.2
 
-The first release. A full-screen countdown for live meetings that runs on its own, or together with **Meeting Media Manager (M³)**
+The first public release. A full-screen countdown for live meetings that runs on its own, or together with **Meeting Media Manager (M³)**
 and **OBS Studio** so that people watching on Zoom see the timer too, with smooth fades and nobody switching scenes by hand.
 
 > **Windows 10/11 (x64) only.** The M³ hand-off drives Windows windows.
@@ -9,7 +9,7 @@ and **OBS Studio** so that people watching on Zoom see the timer too, with smoot
 
 ## Download
 
-- **`StageCountdown-Setup-1.0.0.exe`**: the installer. Use this one: it updates itself.
+- **`StageCountdown-Setup-1.0.2.exe`**: the installer. Use this one: it updates itself.
 - Windows may show a blue **SmartScreen** warning because the app is not code-signed: click **More info → Run anyway**.
 - Don't delete `latest.yml` from this release: installed copies read it to find updates.
 
@@ -22,6 +22,7 @@ and **OBS Studio** so that people watching on Zoom see the timer too, with smoot
 - Choose which screen the countdown appears on (Automatic, or pick one).
 - Accurate wall-clock timing that keeps running when the window is minimized or hidden.
 - Fixed, smooth start sequence: black, fade-in showing the full time, then counting begins.
+- Smooth hand-back to M³: the timer fades to black and holds black for 3 seconds, M³'s media display fades in on top, the timer window closes behind it, and OBS fades back one second later.
 - Optional **Close Stage Countdown after the timer ends**, with a visible "Closing in Ns, click to cancel" countdown.
 - 12 h / 24 h clock format for the controller.
 
@@ -35,7 +36,8 @@ and **OBS Studio** so that people watching on Zoom see the timer too, with smoot
 - Toggle button to flip M³'s media display by hand.
 
 ### Optional OBS scene switching (for Zoom)
-- Fades OBS to your **Media Display** scene when the countdown starts and back to your **Camera** scene when it ends or is stopped.
+- Fades OBS to your **Media Display** scene when the countdown starts and back when it ends or is stopped: to your **Camera** scene, or (new option) to **whichever scene OBS was on before the countdown**.
+- OBS returning to the camera is the very last step of the hand-back, so Zoom never shows the camera while the stage is still changing.
 - Connects over OBS WebSocket (port and password configurable); finds OBS whether it is opened before or after the app.
 - Supports OBS **Studio Mode**; restores your own transition and Fade duration afterwards.
 - Password stored **encrypted** on your PC and never shown back in the UI.

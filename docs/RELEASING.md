@@ -4,6 +4,7 @@ Installed copies check GitHub Releases at every start (8 s after launch) and eve
 operator sees a blue "Update ready" badge (app + OBS dock), a Windows notification and a tray item, and installs it when ready (or it
 installs on the next quit). It never restarts by itself.
 
+0. Write `docs/RELEASE-NOTES-X.Y.Z.md` (the workflow pastes it into the Release page).
 1. Add an entry for the new version at the top of `src/lib/changelog.ts` (plain language, for the operator). It is shown once after the update. A test fails if it is missing.
 2. Change `"version"` in `package.json` (e.g. `1.0.0` -> `1.1.0`). It must be higher than the installed one.
 3. Run `npm test`, `npm run typecheck`, `npm run lint`.
