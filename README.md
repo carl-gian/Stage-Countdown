@@ -79,15 +79,16 @@ shortcut you would press: M³'s **Media Window** shortcut (open/close the media 
 2. In **Stage Countdown**: *Settings → Meeting Media Manager (M³)* → make sure the switch is on, then click the **Shortcut** box and press the same combination.
 3. Open M³ and its media window on the display you chose, then press **Start**.
 
-M³ has two windows. The app watches **"Media Player - M³"**, the media display the audience sees, and ignores M³'s own controller
-window ("Meeting media - M³"). The controller (and the OBS dock) show **M³ Media Display Shown** or **M³ Media Display Hidden**, read for real every couple of seconds.
+M³ has two windows. The app **detects** **"Media Player - M³"**, the media display the audience sees. M³'s own controller window
+("Meeting media - M³") is never used to decide anything, but the app **selects it (brings it to the front) just before pressing the
+shortcut**, so the key press reaches M³; if it can't be selected the shortcut is sent anyway. The controller (and the OBS dock) show **M³ Media Display Shown** or **M³ Media Display Hidden**, read for real every couple of seconds.
 
 - **Verified:** before and after every shortcut the app checks whether the media display is actually showing and retries once if the
   shortcut didn't work. If M³ still ignores it (M³ also ignores shortcuts while one of its own dialogs is open), the app hides, and later
   shows, M³'s media display directly, so it can never stay on top of the timer. It only brings M³ back if it was the one that hid it.
 - **Test the shortcut:** *Settings → Meeting Media Manager (M³) → Test the shortcut* presses it once and tells you whether M³ really reacted
   (green: works; amber: M³ ignored it but the direct method works; red: neither worked), then puts M³ back as it was.
-- M³'s own controller window ("Meeting media - M³") is never touched or brought forward.
+- Because the app selects M³'s controller window before pressing the shortcut, that window may come to the front each time the shortcut is sent.
 - **Guard while a countdown runs:** if M³'s media display ever comes back on top of the timer, the app hides it again
   ("M³ was showing on top of the timer — hid it again"). If nothing can hide it, the guard stops after a few tries with a clear message instead
   of hammering the keyboard. To really show M³ mid-countdown, press **Stop** first.

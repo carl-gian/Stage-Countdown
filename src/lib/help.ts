@@ -77,7 +77,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         paragraphs: [
           'M³ shows media (songs, pictures, videos) on a second screen. The countdown uses that same screen, so Stage Countdown tells M³ to hide its media window, shows the timer there, and then gives the screen back to M³ when the timer ends.',
           'M³ cannot be asked directly. Instead the app sends M³ the same keyboard shortcut you would press: M³\'s "Media Window" shortcut, which opens or closes the media window.',
-          'M³ has two windows. The app watches the one the audience sees, "Media Player - M³", and checks it for real: before and after every shortcut it looks at whether that window is showing and tries again if the shortcut did not work. If M³ still ignores the shortcut, the app hides (and later shows) M³\'s media display directly, so it can never stay on top of the timer. It ignores M³\'s own controller window ("Meeting media - M³") completely.',
+          'M³ has two windows. The app watches the one the audience sees, "Media Player - M³", and checks it for real: before and after every shortcut it looks at whether that window is showing and tries again if the shortcut did not work. If M³ still ignores the shortcut, the app hides (and later shows) M³\'s media display directly, so it can never stay on top of the timer. Before pressing the shortcut the app selects M³\'s own controller window ("Meeting media - M³") so the key press reaches M³; that window is never used to decide whether M³ is showing.',
         ],
       },
       {

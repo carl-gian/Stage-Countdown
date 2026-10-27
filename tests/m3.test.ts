@@ -5,13 +5,14 @@ const require = createRequire(import.meta.url);
 const { createM3 } = require('../electron/m3.cjs');
 
 /** A simulated M3: a media window that the shortcut toggles after a short fade, like the real one. */
-function fakeM3(opts: { visible?: boolean; exists?: boolean; ignoreKeys?: number; stateWorks?: boolean; directWorks?: boolean } = {}) {
+function fakeM3(opts: { visible?: boolean; exists?: boolean; ignoreKeys?: number; stateWorks?: boolean; directWorks?: boolean; focusOk?: boolean } = {}) {
   const win = { exists: opts.exists ?? true, visible: opts.visible ?? true, ignoreKeys: opts.ignoreKeys ?? 0 };
   const calls: string[] = [];
   const ps = async (cmd: string) => {
     const type = cmd.split('|')[0];
     calls.push(type);
     if (type === 'state') return opts.stateWorks === false ? 'FAIL worker-unavailable' : !win.exists ? 'none' : win.visible ? 'shown' : 'hidden';
+    if (type === 'focus') return opts.focusOk === false ? 'FAIL focus' : 'OK';
     if (type === 'windows') return win.exists ? `[Media Player - M3 visible=${win.visible}]` : '(none)';
     if (type === 'hide' || type === 'show') {
       if (opts.directWorks === false || !win.exists) return 'OK 0';
@@ -121,11 +122,27 @@ describe('M3 hand-off with real detection', () => {
     expect(m3.needsRestore()).toBe(false);
   });
 
-  it('never touches M3\'s own controller window (no focus step at all)', async () => {
+  it('selects M3\'s controller window BEFORE pressing the shortcut, and never reads it as the media window', async () => {
     const sim = fakeM3({ visible: true });
     const { m3 } = make(sim);
     await m3.hide();
-    await m3.show();
+    const firstFocus = sim.calls.indexOf('focus');
+    const firstKey = sim.calls.indexOf('key');
+    expect(firstFocus).toBeGreaterThanOrEqual(0);
+    expect(firstFocus).toBeLessThan(firstKey);
+  });
+
+  it('still presses the shortcut when the controller window cannot be selected', async () => {
+    const sim = fakeM3({ visible: true, focusOk: false });
+    const { m3 } = make(sim);
+    expect(await m3.hide()).toMatchObject({ ok: true, media: 'hidden' });
+    expect(sim.keys()).toBe(1);
+  });
+
+  it('can be told not to select the controller window (m3.focusController = false)', async () => {
+    const sim = fakeM3({ visible: true });
+    const { m3 } = make(sim, true, { focusController: false });
+    await m3.hide();
     expect(sim.calls).not.toContain('focus');
   });
 

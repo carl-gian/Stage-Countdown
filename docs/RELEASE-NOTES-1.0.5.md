@@ -11,8 +11,9 @@ A fix for the Meeting Media Manager (M³) hand-off, found from a real log. Insta
   tries twice, then uses the direct method, and the guard gives up with a clear message if nothing works.
 - **New "Test the shortcut" button** in *Settings → Meeting Media Manager (M³)*. It presses the shortcut once, tells you whether M³ really
   reacted (green / amber / red, with what to check), and puts M³ back as it was.
-- **M³'s own controller window is left completely alone.** The app no longer brings it forward (the shortcut is global). Shortcuts are
-  also now sent like a real keyboard.
+- **More reliable selection of M³'s controller window.** The app selects "Meeting media - M³" before pressing the shortcut (as the original
+  tool did) using a stronger method than before, and still sends the shortcut if Windows refuses. That window is never used to decide
+  whether M³ is showing; only "Media Player - M³" is. Shortcuts are also now sent like a real keyboard.
 - **Better logs.** The log says exactly which shortcut was sent and which windows were found.
 
 ## Download

@@ -1,8 +1,9 @@
 // Meeting Media Manager (M3) hand-off. No Electron imports, so it is testable with a simulated M3.
 //
-// M3 has TWO windows. The one that matters here is the MEDIA window, "Media Player - M3" (what the audience sees,
-// the one that covers the stage display). M3's own controller window, "Meeting media - M3", is IGNORED: it is never
-// read, focused or moved (M3's Media Window shortcut is a global shortcut, so it does not need to be in front).
+// M3 has TWO windows. The MEDIA window, "Media Player - M3" (what the audience sees, the one that covers the stage), is
+// the one we DETECT. M3's own controller window, "Meeting media - M3", is never used to decide anything, but it is SELECTED
+// (brought to the front) before the shortcut is pressed, because M3 needs to be the active program for the key press to
+// register reliably (the original PowerShell tool did the same). If it cannot be selected the shortcut is still sent.
 //
 // M3's shortcut flips an internal flag inside M3, and M3 ignores it while one of its dialogs is open, so a press can
 // silently do nothing. We therefore never trust a remembered state: before and after every press we READ the real state
@@ -27,8 +28,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
  * @param {number} [d.guardBackoffMs] pause after a failed guard cycle (multiplied by the number of failures)
  * @param {number} [d.verifyMs] how long to wait for M3 to react to a shortcut
  * @param {number} [d.verifyStepMs]
+ * @param {number} [d.focusSettleMs] pause between selecting M3's controller window and pressing the keys
  */
-function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs = 2000, guardMs = 1500, guardGiveUpAfter = 3, guardBackoffMs = 5000, verifyMs = 2000, verifyStepMs = 150 }) {
+function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs = 2000, guardMs = 1500, guardGiveUpAfter = 3, guardBackoffMs = 5000, verifyMs = 2000, verifyStepMs = 150, focusSettleMs = 250 }) {
   let media = 'unknown'; // shown | hidden | none (no media window at all) | unknown (cannot read it)
   let hiddenByUs = false; // we hid it, so we are the ones to bring it back
   let hiddenVia = ''; // 'shortcut' | 'window': how we hid it (a window hidden directly must be shown directly)
@@ -100,17 +102,32 @@ function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs =
   }
 
   /** Which windows match the media title right now (for the log, when something does not work). */
-  async function logWindows(why) {
-    const list = await ps(`windows|${title()}`, 2500);
-    log(`[m3] ${why}: windows matching "${title()}": ${list}`);
+  async function logWindows(why, part = title()) {
+    const list = await ps(`windows|${part}`, 2500);
+    log(`[m3] ${why}: windows matching "${part}": ${list}`);
     return list;
   }
 
-  /** Presses M3's Media Window shortcut (a global shortcut: M3's own windows are not touched). Returns an error text or null. */
+  /** Selects (brings to the front) M3's controller window, "Meeting media - M3". Best effort: returns the worker's answer. */
+  async function selectController() {
+    const cfg = getConfig();
+    if (cfg.m3.focusController === false) return 'skipped';
+    const r = await ps(`focus|${cfg.m3WindowTitle}`, 4000);
+    if (r !== 'OK') {
+      log(`[m3] could not select M3's controller window "${cfg.m3WindowTitle}" (${r}) - sending the shortcut anyway`);
+      if (r === 'FAIL nowindow') await logWindows('controller window not found', cfg.m3WindowTitle);
+    } else {
+      await wait(focusSettleMs);
+    }
+    return r;
+  }
+
+  /** Selects M3's controller window, then presses M3's Media Window shortcut. Returns an error text or null. */
   async function sendKey() {
     const cfg = getConfig();
     const k = shortcutToKeys(cfg.hideShortcut);
-    log(`[m3] sending the shortcut ${describeShortcut(cfg.hideShortcut)} (virtual key ${k.vkCode})`);
+    const selected = await selectController();
+    log(`[m3] sending the shortcut ${describeShortcut(cfg.hideShortcut)} (virtual key ${k.vkCode}; controller window: ${selected})`);
     const key = await ps(`key|${k.vkCode}|${+k.hasAlt}|${+k.hasShift}|${+k.hasCtrl}`);
     if (key !== 'OK') {
       log('[m3] shortcut failed:', key);
@@ -256,6 +273,7 @@ function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs =
       const before = await detect();
       report.before = before;
       report.windows = await ps(`windows|${title()}`, 2500);
+      report.controller = await ps(`windows|${cfg.m3WindowTitle}`, 2500);
       if (before === 'unknown') return { ...report, result: 'cannot-read' };
       if (before === 'none') return { ...report, result: 'no-window' };
 

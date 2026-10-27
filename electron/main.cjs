@@ -256,6 +256,8 @@ public class W {
   [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool f);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte sc, uint f, UIntPtr e);
   [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint type);
+  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
+  [DllImport("user32.dll")] static extern void SwitchToThisWindow(IntPtr h, bool alt);
 
   // The hardware scan code for a virtual key, so injected keys look like a real keyboard.
   public static byte Scan(uint vk) { return (byte)MapVirtualKey(vk, 0); }
@@ -272,19 +274,27 @@ public class W {
     return found;
   }
 
-  // Brings the window to the front and CONFIRMS it got there (Windows often refuses SetForegroundWindow).
+  // Brings the window to the front and CONFIRMS it got there. Windows often refuses SetForegroundWindow, so this attaches to
+  // both the current foreground thread and the target's thread, and escalates (BringWindowToTop, SwitchToThisWindow).
   public static string Focus(string part) {
     IntPtr h = Find(part);
     if (h == IntPtr.Zero) return "FAIL nowindow";
     if (IsIconic(h)) ShowWindow(h, 9);
-    for (int i = 0; i < 3; i++) {
-      uint pid;
-      uint t1 = GetWindowThreadProcessId(GetForegroundWindow(), out pid);
-      uint t2 = GetCurrentThreadId();
-      bool att = (t1 != t2) && AttachThreadInput(t2, t1, true);
+    if (GetForegroundWindow() == h) return "OK";
+    for (int i = 0; i < 5; i++) {
+      uint pidFg, pidTarget;
+      uint tFg = GetWindowThreadProcessId(GetForegroundWindow(), out pidFg);
+      uint tTarget = GetWindowThreadProcessId(h, out pidTarget);
+      uint tMe = GetCurrentThreadId();
+      bool a1 = (tFg != tMe) && AttachThreadInput(tMe, tFg, true);
+      bool a2 = (tTarget != tMe) && (tTarget != tFg) && AttachThreadInput(tMe, tTarget, true);
+      BringWindowToTop(h);
+      ShowWindow(h, 5);
       SetForegroundWindow(h);
-      if (att) AttachThreadInput(t2, t1, false);
-      System.Threading.Thread.Sleep(100);
+      if (i >= 2) SwitchToThisWindow(h, true);
+      if (a2) AttachThreadInput(tMe, tTarget, false);
+      if (a1) AttachThreadInput(tMe, tFg, false);
+      System.Threading.Thread.Sleep(120);
       if (GetForegroundWindow() == h) return "OK";
     }
     return "FAIL focus";

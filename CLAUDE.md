@@ -21,8 +21,10 @@ countdown on a stage display and hides/shows the **Meeting Media Manager (M³)**
 ## 1. How M³ is controlled (electron/m3.cjs, tested against a simulated M³ in tests/m3.test.ts)
 
 M³ has TWO windows: the MEDIA window **"Media Player - M³"** (audience-facing, covers the stage: this is the one we detect;
-`config.m3MediaWindowTitle` = `Media Player - M`) and its own controller **"Meeting media - M³"**, which the app IGNORES completely
-(never read, focused or moved: M³'s Media Window shortcut is a `globalShortcut`, so no focus is needed).
+`config.m3MediaWindowTitle` = `Media Player - M`) and its own controller **"Meeting media - M³"** (`m3WindowTitle`), which is never used to decide whether M³ is showing but IS selected
+(brought to the front: `Focus` in the PS script attaches to the foreground and target threads, BringWindowToTop, SwitchToThisWindow, and
+verifies) just before the shortcut is pressed, as the original PowerShell tool did. If it cannot be selected (log: `controller window: FAIL
+focus|nowindow`) the shortcut is sent anyway. `m3.focusController = false` turns the selection off.
 
 How M³ handles the shortcut (from M³'s source): `shortcutMediaWindow` → `toggleMediaWindowVisibility()` flips M³'s INTERNAL
 `mediaWindowVisible` flag, and `executeShortcut` ignores it while any M³ dialog is open. So a press can silently do nothing.

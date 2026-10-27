@@ -4,7 +4,7 @@ const DEFAULT_SHORTCUT = { ctrl: false, alt: true, shift: true, code: 'F3' };
 
 const DEFAULT_CONFIG = {
   lastDisplayId: null,
-  // M3 has two windows: its own controller ("Meeting media - M3", only brought forward so the shortcut reaches it)
+  // M3 has two windows: its own controller ("Meeting media - M3", selected before the shortcut is pressed)
   // and the MEDIA window ("Media Player - M3") that covers the stage, which is the one we detect.
   m3WindowTitle: 'Meeting media - M',
   m3MediaWindowTitle: 'Media Player - M',
@@ -17,7 +17,8 @@ const DEFAULT_CONFIG = {
   obs: { enabled: false, port: 4455, mediaScene: '', cameraScene: '', returnMode: 'camera' },
   // Meeting Media Manager hand-off. Off = a standalone countdown (nothing is hidden/shown, no shortcut is sent).
   // directFallback: if M3 ignores the shortcut, hide/show its media window directly (Win32) so it can never stay on top.
-  m3: { enabled: true, directFallback: true },
+  // focusController: select M3's own window ("Meeting media - M3") before pressing the shortcut.
+  m3: { enabled: true, directFallback: true, focusController: true },
   lastSeenVersion: '',
   obsPasswordEnc: '',
 };

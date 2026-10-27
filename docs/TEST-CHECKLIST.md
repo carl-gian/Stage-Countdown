@@ -73,5 +73,5 @@ In OBS: Tools -> WebSocket Server Settings -> enable (note port and password). M
 - [ ] Settings > M³ > **Test the shortcut** with M³'s media window open and showing: green "It works" (M³ briefly hides and is put back). Then with a wrong shortcut typed in Stage Countdown: amber "M³ ignored ... direct method works".
 - [ ] With the shortcut deliberately different from M³'s: Start still hides M³'s media display (a "hidden directly" note appears), the timer is never covered, and at the end M³'s media display comes back.
 - [ ] While counting, bring M³'s media display back by hand: it is hidden again within a few seconds, and the log shows only a few presses (not one every few seconds forever).
-- [ ] Open the log (tray > Open logs folder): each M³ action shows "sending the shortcut Alt + Shift + F3 (virtual key 114)" and, on failures, the list of windows found. No "FAIL focus" / "nowindow" lines any more.
-- [ ] M³'s own controller window ("Meeting media - M³") is never brought forward or moved by the app.
+- [ ] Open the log (tray > Open logs folder): each M³ action shows "sending the shortcut Alt + Shift + F3 (virtual key 114; controller window: OK)" and, on failures, the list of windows found. If "controller window" says FAIL, note which (focus = Windows refused, nowindow = "Meeting media - M³" is hidden/not found).
+- [ ] M³'s controller window ("Meeting media - M³") is brought to the front when the shortcut is sent (and the shortcut still works if you keep it hidden in the tray).
