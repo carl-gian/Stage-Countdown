@@ -39,7 +39,7 @@
     "publish": {
       "provider": "github",
       "owner": "carl-gian",
-      "repo": "Project-Stage-Countdown",
+      "repo": "Stage-Countdown",
       "releaseType": "release"
     },
     "portable": {
