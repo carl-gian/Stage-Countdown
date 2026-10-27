@@ -18,6 +18,17 @@ interface M3Status {
   error?: string;
 }
 
+/** Result of Settings > M³ > Test. */
+interface M3TestResult {
+  result: 'shortcut-ok' | 'direct-only' | 'nothing-works' | 'no-window' | 'cannot-read' | 'off';
+  shortcut: string;
+  title: string;
+  before?: string;
+  after?: string;
+  windows?: string;
+  error?: string;
+}
+
 interface ObsStatus {
   enabled: boolean;
   state: 'off' | 'searching' | 'connecting' | 'connected' | 'auth-failed' | 'error';
@@ -82,6 +93,8 @@ interface Window {
     getM3State: () => Promise<M3Status>;
     /** While a countdown runs: keep M³'s media display hidden (the app re-sends the shortcut if it comes back). */
     setM3Guard: (on: boolean) => Promise<boolean>;
+    /** Presses the shortcut once and reports whether M³'s media display really reacted (then puts it back). */
+    m3Test: () => Promise<M3TestResult>;
     onM3Status: (callback: (status: M3Status) => void) => () => void;
     getAppInfo: () => Promise<AppInfo>;
     ackVersion: () => Promise<boolean>;

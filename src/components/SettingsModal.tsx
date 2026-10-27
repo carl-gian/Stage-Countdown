@@ -126,6 +126,23 @@ function ShortcutRecorder({
   );
 }
 
+function M3TestMessage({ result }: { result: M3TestResult }) {
+  const r = result;
+  const [cls, text] =
+    r.result === 'shortcut-ok'
+      ? ['text-emerald-400', `✓ It works: ${r.shortcut} made M³'s media display change from ${r.before} to ${r.after}, and it was put back.`]
+      : r.result === 'direct-only'
+        ? ['text-amber-400', `⚠ M³ ignored ${r.shortcut}, but hiding its window directly worked, so the app will use that automatically. To fix the shortcut: it must match M³'s "Media Window" shortcut (M³ Settings → Interface & Shortcuts), keyboard shortcuts must be on in M³, and no M³ dialog may be open.`]
+        : r.result === 'nothing-works'
+          ? ['text-red-400', `✗ Neither the shortcut (${r.shortcut}) nor hiding the window directly changed M³'s media display. ${r.error ?? ''}`]
+          : r.result === 'no-window'
+            ? ['text-amber-400', `M³'s media window ("${r.title}") was not found. Open M³ and its media window, then test again.`]
+            : r.result === 'cannot-read'
+              ? ['text-amber-400', "The app could not read M³'s window state (this only works on Windows)."]
+              : ['text-gray-400', 'Control of M³ is switched off.'];
+  return <p className={`text-[11px] leading-relaxed ${cls}`}>{text}</p>;
+}
+
 function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
   return (
     <div className="flex items-center gap-2 mb-3">
@@ -221,6 +238,7 @@ export default function SettingsModal({ open, onClose, visual, onChange, onM3Ena
   const [selectedDisplayId, setSelectedDisplayId] = useState<string>('');
   const [hideShortcut, setHideShortcut] = useState<ShortcutValue>(DEFAULT_SHORTCUT);
   const [m3Enabled, setM3Enabled] = useState(true);
+  const [m3Test, setM3Test] = useState<{ running: boolean; result?: M3TestResult }>({ running: false });
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
 
@@ -344,6 +362,20 @@ export default function SettingsModal({ open, onClose, visual, onChange, onM3Ena
                 </label>
                 <div className={`transition-opacity ${m3Enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
                   <ShortcutRecorder value={hideShortcut} onChange={updateShortcut} />
+                  <div className="mt-2.5 flex items-start gap-2">
+                    <button
+                      disabled={m3Test.running}
+                      onClick={() => {
+                        setM3Test({ running: true });
+                        window.electronAPI?.m3Test?.().then((result) => setM3Test({ running: false, result }));
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 shrink-0"
+                      title="Presses the shortcut once and checks that M³'s media display really reacted, then puts it back"
+                    >
+                      {m3Test.running ? 'Testing…' : 'Test the shortcut'}
+                    </button>
+                    {m3Test.result && <M3TestMessage result={m3Test.result} />}
+                  </div>
                   <p className="text-[11px] text-gray-500 mt-1.5">
                     Must be the same as the "Media Window" shortcut in M³ (M³ Settings → Interface &amp; Shortcuts → turn on keyboard shortcuts).
                     <button onClick={() => onOpenHelp?.('m3')} className="ml-1 text-emerald-400 hover:underline">How to set it up</button>

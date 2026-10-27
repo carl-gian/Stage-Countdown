@@ -21,16 +21,24 @@ countdown on a stage display and hides/shows the **Meeting Media Manager (M³)**
 ## 1. How M³ is controlled (electron/m3.cjs, tested against a simulated M³ in tests/m3.test.ts)
 
 M³ has TWO windows: the MEDIA window **"Media Player - M³"** (audience-facing, covers the stage: this is the one we detect;
-`config.m3MediaWindowTitle` = `Media Player - M`) and its own controller **"Meeting media - M³"** (`m3WindowTitle`: only brought
-forward, best effort, so the keyboard shortcut reaches M³; never used to decide whether M³ is showing).
+`config.m3MediaWindowTitle` = `Media Player - M`) and its own controller **"Meeting media - M³"**, which the app IGNORES completely
+(never read, focused or moved: M³'s Media Window shortcut is a `globalShortcut`, so no focus is needed).
+
+How M³ handles the shortcut (from M³'s source): `shortcutMediaWindow` → `toggleMediaWindowVisibility()` flips M³'s INTERNAL
+`mediaWindowVisible` flag, and `executeShortcut` ignores it while any M³ dialog is open. So a press can silently do nothing.
 
 M³'s "Media Window" shortcut is a TOGGLE, so we never trust a remembered state:
 - The resident PowerShell worker (`PS_SCRIPT` in `main.cjs`) answers `state|<title>` with `shown | hidden | none` by reading the real
   window (visible, not minimized, not faded to ~0 opacity; hidden windows still count as existing).
-- `hide()`: if showing, send the shortcut, wait for it to actually hide, retry once, else report an error. `show()`: only if WE hid it
-  (`needsRestore`), verified, retry once. `toggle()` flips whatever is on screen. All serialized in one queue.
-- **Guard:** `m3-guard` on = every 1.5 s re-read the state and, if the media display is showing, send the shortcut again (note shown in
-  the row). On from the first hide until the hand-back begins (App.tsx).
+- `hide()`: if showing, send the shortcut, wait for it to actually hide, retry once; if M³ still ignores it, **hide the window directly**
+  (Win32 `ShowWindow`, `m3.directFallback`, default on; PS commands `hide|` / `show|`, `windows|` lists matches for the log) and remember
+  `hiddenVia='window'` so `show()` shows it directly too (M³ never knew). `show()`: only if WE hid it (`needsRestore`), verified.
+  `toggle()` flips whatever is on screen. `test()` (Settings button) presses once and reports shortcut-ok / direct-only / nothing-works.
+  All serialized in one queue. Every press is logged with the shortcut in words (`describeShortcut`).
+- Keys are injected with scan codes and gentle timing (`Send-Key` in the PS script).
+- **Guard:** `m3-guard` on = every 1.5 s re-read the state and, if the media display is showing, hide it again (note shown in the row).
+  After a failed cycle it backs off (5 s × failures) and gives up after 3 failed cycles with a clear note, so it never floods the
+  keyboard. On from the first hide until the hand-back begins (App.tsx).
 - A 2 s background refresh keeps the "M³ Media Display Shown / Hidden" badge truthful (also after changes made by hand). The wording lives in `src/lib/m3label.ts` (tested); "not open" counts as Hidden.
 - Only if the state cannot be read (non-Windows, worker down) does it fall back to the old remembered toggle ("(assumed)").
 - Closing the controller while we hold M³ hidden restores it first. `m3.enabled = false` = standalone: nothing is read or sent.

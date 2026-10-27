@@ -28,6 +28,7 @@ const api = {
   toggleM3: () => ipcRenderer.invoke('toggle-m3'),
   getM3State: () => ipcRenderer.invoke('get-m3-state'),
   setM3Guard: (on) => ipcRenderer.invoke('m3-guard', on),
+  m3Test: () => ipcRenderer.invoke('m3-test'),
   onM3Status: (cb) => subscribe('m3-status', cb),
 
   // App info, auto-update, help, dock. (Events return their unsubscribe function.)

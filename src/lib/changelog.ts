@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.5',
+    date: '2026-10-28',
+    items: [
+      'M³ fix: if M³ ignores the shortcut, the app now hides (and later shows) M³\'s media display directly, so it can no longer stay on top of the timer.',
+      'No more shortcut flood: before, a shortcut M³ did not react to was re-sent every few seconds. Now it tries twice, then uses the direct method, and the guard gives up with a clear message if nothing works.',
+      'New "Test the shortcut" button in Settings > Meeting Media Manager (M³): it presses the shortcut once and tells you whether M³ really reacted.',
+      'The app no longer brings M³\'s own controller window forward (the shortcut is global). Shortcuts are now sent like a real keyboard.',
+      'The log now says exactly which shortcut it sent and which windows it found, which makes problems easy to diagnose.',
+    ],
+  },
+  {
     version: '1.0.4',
     date: '2026-10-28',
     items: [

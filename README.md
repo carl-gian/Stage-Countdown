@@ -82,10 +82,15 @@ shortcut you would press: M³'s **Media Window** shortcut (open/close the media 
 M³ has two windows. The app watches **"Media Player - M³"**, the media display the audience sees, and ignores M³'s own controller
 window ("Meeting media - M³"). The controller (and the OBS dock) show **M³ Media Display Shown** or **M³ Media Display Hidden**, read for real every couple of seconds.
 
-- **Verified:** before and after every shortcut the app checks whether the media display is actually showing, retries once if the
-  shortcut didn't work, and shows a red message if it still didn't. It only brings M³ back if it was the one that hid it.
-- **Guard while a countdown runs:** if M³'s media display ever comes back on top of the timer, the app sends the shortcut again to hide it
-  ("M³ was showing on top of the timer — hid it again"). To really show M³ mid-countdown, press **Stop** first.
+- **Verified:** before and after every shortcut the app checks whether the media display is actually showing and retries once if the
+  shortcut didn't work. If M³ still ignores it (M³ also ignores shortcuts while one of its own dialogs is open), the app hides, and later
+  shows, M³'s media display directly, so it can never stay on top of the timer. It only brings M³ back if it was the one that hid it.
+- **Test the shortcut:** *Settings → Meeting Media Manager (M³) → Test the shortcut* presses it once and tells you whether M³ really reacted
+  (green: works; amber: M³ ignored it but the direct method works; red: neither worked), then puts M³ back as it was.
+- M³'s own controller window ("Meeting media - M³") is never touched or brought forward.
+- **Guard while a countdown runs:** if M³'s media display ever comes back on top of the timer, the app hides it again
+  ("M³ was showing on top of the timer — hid it again"). If nothing can hide it, the guard stops after a few tries with a clear message instead
+  of hammering the keyboard. To really show M³ mid-countdown, press **Stop** first.
 - **Toggle** sends the shortcut right now (shows it if hidden, hides it if showing).
 - If M³ can't be reached the countdown still runs. Closing the app while it has M³ hidden brings M³ back first.
 

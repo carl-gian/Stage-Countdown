@@ -77,7 +77,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         paragraphs: [
           'M³ shows media (songs, pictures, videos) on a second screen. The countdown uses that same screen, so Stage Countdown tells M³ to hide its media window, shows the timer there, and then gives the screen back to M³ when the timer ends.',
           'M³ cannot be asked directly. Instead the app sends M³ the same keyboard shortcut you would press: M³\'s "Media Window" shortcut, which opens or closes the media window.',
-          'M³ has two windows. The app watches the one the audience sees, "Media Player - M³", and checks it for real: before and after every shortcut it looks at whether that window is showing, retries once if the shortcut did not work, and shows an error if it still did not. It ignores M³\'s own controller window ("Meeting media - M³").',
+          'M³ has two windows. The app watches the one the audience sees, "Media Player - M³", and checks it for real: before and after every shortcut it looks at whether that window is showing and tries again if the shortcut did not work. If M³ still ignores the shortcut, the app hides (and later shows) M³\'s media display directly, so it can never stay on top of the timer. It ignores M³\'s own controller window ("Meeting media - M³") completely.',
         ],
       },
       {
@@ -103,6 +103,15 @@ export const HELP_TOPICS: HelpTopic[] = [
           'When the countdown ends (or you press Stop) the way back is deliberately gentle: the timer window fades to black and stays black for 3 seconds, then the shortcut brings M³\'s media display back so it fades in over the black, the timer window closes behind it, and (with OBS on) OBS fades back one second later. The app only brings M³ back if it was the one that hid it.',
           'For the smoothest result turn on M³\'s own fade: M³ Settings > "Enable Media Window Fade Transitions".',
         ],
+      },
+      {
+        heading: 'Is the shortcut working? Press "Test"',
+        steps: [
+          'Open M³ and its media window.',
+          'In Stage Countdown open Settings > Meeting Media Manager (M³) and press "Test the shortcut". It presses the shortcut once, checks whether M³\'s media display really changed, and puts it back.',
+          'Green means the shortcut works. Amber means M³ ignored it but the direct method works (the app will use that); the message lists what to check in M³. Red means neither worked.',
+        ],
+        tip: 'M³ ignores its shortcuts while one of its own dialogs is open, and the shortcut must be exactly the same as in M³ (Interface & Shortcuts > Media Window, with keyboard shortcuts turned on).',
       },
       {
         heading: 'If it does not work',

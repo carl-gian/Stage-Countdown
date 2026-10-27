@@ -255,6 +255,10 @@ public class W {
   [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool f);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte sc, uint f, UIntPtr e);
+  [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint type);
+
+  // The hardware scan code for a virtual key, so injected keys look like a real keyboard.
+  public static byte Scan(uint vk) { return (byte)MapVirtualKey(vk, 0); }
 
   static IntPtr Find(string part) {
     IntPtr found = IntPtr.Zero;
@@ -304,6 +308,37 @@ public class W2 {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int idx);
   [DllImport("user32.dll")] static extern bool GetLayeredWindowAttributes(IntPtr h, out uint key, out byte alpha, out uint flags);
+  [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int c);
+
+  // Every window whose title contains "part", described, for diagnostics.
+  public static string List(string part) {
+    StringBuilder all = new StringBuilder();
+    EnumWindows(delegate(IntPtr h, IntPtr l) {
+      StringBuilder sb = new StringBuilder(256);
+      GetWindowText(h, sb, 256);
+      if (sb.ToString().IndexOf(part, StringComparison.OrdinalIgnoreCase) < 0) return true;
+      all.Append("[" + sb.ToString() + " visible=" + IsWindowVisible(h) + " minimized=" + IsIconic(h) + "] ");
+      return true;
+    }, IntPtr.Zero);
+    return all.Length == 0 ? "(none)" : all.ToString();
+  }
+
+  // Hides (show=false) or shows (show=true) every window whose title contains "part". Returns how many it changed.
+  // Used only when M3 ignores its own shortcut.
+  public static int SetVisible(string part, bool show) {
+    int changed = 0;
+    EnumWindows(delegate(IntPtr h, IntPtr l) {
+      StringBuilder sb = new StringBuilder(256);
+      GetWindowText(h, sb, 256);
+      if (sb.ToString().IndexOf(part, StringComparison.OrdinalIgnoreCase) < 0) return true;
+      if (show) {
+        if (!IsWindowVisible(h)) { ShowWindow(h, 8); changed++; }
+        else if (IsIconic(h)) { ShowWindow(h, 9); changed++; }
+      } else if (IsWindowVisible(h)) { ShowWindow(h, 0); changed++; }
+      return true;
+    }, IntPtr.Zero);
+    return changed;
+  }
 
   // The REAL state of a window whose title contains "part": shown | hidden | none (no such window).
   // Hidden windows are included in the search (Electron hide() keeps the window). A window that is
@@ -331,15 +366,17 @@ public class W2 {
 } catch { $hasState = $false }
 
 function Send-Key($vk, $alt, $shift, $ctrl) {
-  if ($shift) { [W]::keybd_event(0x10, 0, 0, [UIntPtr]::Zero) }
-  if ($alt)   { [W]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero) }
-  if ($ctrl)  { [W]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero) }
-  [W]::keybd_event([byte]$vk, 0, 0, [UIntPtr]::Zero)
-  Start-Sleep -Milliseconds 50
-  [W]::keybd_event([byte]$vk, 0, 2, [UIntPtr]::Zero)
-  if ($ctrl)  { [W]::keybd_event(0x11, 0, 2, [UIntPtr]::Zero) }
-  if ($alt)   { [W]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero) }
-  if ($shift) { [W]::keybd_event(0x10, 0, 2, [UIntPtr]::Zero) }
+  $mods = @()
+  if ($shift) { $mods += 0x10 }
+  if ($alt)   { $mods += 0x12 }
+  if ($ctrl)  { $mods += 0x11 }
+  foreach ($m in $mods) { [W]::keybd_event([byte]$m, [W]::Scan($m), 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 30 }
+  [W]::keybd_event([byte]$vk, [W]::Scan($vk), 0, [UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 80
+  [W]::keybd_event([byte]$vk, [W]::Scan($vk), 2, [UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 30
+  [array]::Reverse($mods)
+  foreach ($m in $mods) { [W]::keybd_event([byte]$m, [W]::Scan($m), 2, [UIntPtr]::Zero); Start-Sleep -Milliseconds 20 }
 }
 
 [Console]::Out.WriteLine('READY')
@@ -352,6 +389,9 @@ while ($true) {
     switch ($p[1]) {
       'focus' { $r = [W]::Focus($p[2]) }
       'state' { if ($hasState) { $r = [W2]::State($p[2]) } else { $r = 'FAIL nostate' } }
+      'windows' { if ($hasState) { $r = [W2]::List($p[2]) } else { $r = 'FAIL nostate' } }
+      'hide' { if ($hasState) { $r = 'OK ' + [W2]::SetVisible($p[2], $false) } else { $r = 'FAIL nostate' } }
+      'show' { if ($hasState) { $r = 'OK ' + [W2]::SetVisible($p[2], $true) } else { $r = 'FAIL nostate' } }
       'key'   { Send-Key ([int]$p[2]) ($p[3] -eq '1') ($p[4] -eq '1') ($p[5] -eq '1'); $r = 'OK' }
       default { $r = 'FAIL unknown' }
     }
@@ -664,6 +704,8 @@ ipcMain.handle('open-stage-window', async () => {
 ipcMain.handle('trigger-shortcut', () => m3.hide());
 ipcMain.handle('select-and-signal-m3', () => m3.show());
 ipcMain.handle('toggle-m3', () => m3.toggle());
+// Settings > M3 > Test: sends the shortcut once and reports whether M3's media display really reacted.
+ipcMain.handle('m3-test', () => m3.test());
 ipcMain.handle('get-m3-state', () => m3.refresh());
 // While a countdown runs: keep M3's media display hidden (re-sends the shortcut if it comes back on top).
 ipcMain.handle('m3-guard', (_event, on) => {

@@ -5,14 +5,21 @@ const require = createRequire(import.meta.url);
 const { createM3 } = require('../electron/m3.cjs');
 
 /** A simulated M3: a media window that the shortcut toggles after a short fade, like the real one. */
-function fakeM3(opts: { visible?: boolean; exists?: boolean; ignoreKeys?: number; focusOk?: boolean; stateWorks?: boolean } = {}) {
+function fakeM3(opts: { visible?: boolean; exists?: boolean; ignoreKeys?: number; stateWorks?: boolean; directWorks?: boolean } = {}) {
   const win = { exists: opts.exists ?? true, visible: opts.visible ?? true, ignoreKeys: opts.ignoreKeys ?? 0 };
   const calls: string[] = [];
   const ps = async (cmd: string) => {
     const type = cmd.split('|')[0];
     calls.push(type);
     if (type === 'state') return opts.stateWorks === false ? 'FAIL worker-unavailable' : !win.exists ? 'none' : win.visible ? 'shown' : 'hidden';
-    if (type === 'focus') return opts.focusOk === false ? 'FAIL nowindow' : 'OK';
+    if (type === 'windows') return win.exists ? `[Media Player - M3 visible=${win.visible}]` : '(none)';
+    if (type === 'hide' || type === 'show') {
+      if (opts.directWorks === false || !win.exists) return 'OK 0';
+      const want = type === 'show';
+      if (win.visible === want) return 'OK 0';
+      win.visible = want;
+      return 'OK 1';
+    }
     if (type === 'key') {
       if (win.ignoreKeys > 0) win.ignoreKeys--;
       else setTimeout(() => (win.visible = !win.visible), 20); // M3 fades, then toggles
@@ -28,17 +35,18 @@ afterEach(() => {
   while (cleanup.length) cleanup.pop()!();
 });
 
-function make(sim: ReturnType<typeof fakeM3>, enabled = true) {
+function make(sim: ReturnType<typeof fakeM3>, enabled = true, m3Extra: Record<string, unknown> = {}) {
   const statuses: Record<string, unknown>[] = [];
   const m3 = createM3({
     ps: sim.ps,
-    getConfig: () => ({ m3: { enabled }, m3WindowTitle: 'Meeting media - M', m3MediaWindowTitle: 'Media Player - M', hideShortcut: { code: 'F3', alt: true, shift: true, ctrl: false } }),
+    getConfig: () => ({ m3: { enabled, ...m3Extra }, m3WindowTitle: 'Meeting media - M', m3MediaWindowTitle: 'Media Player - M', hideShortcut: { code: 'F3', alt: true, shift: true, ctrl: false } }),
     onStatus: (s: Record<string, unknown>) => statuses.push(s),
     verifyMs: 400,
     verifyStepMs: 10,
     focusSettleMs: 0,
     guardMs: 25,
     pollMs: 30,
+    guardBackoffMs: 30,
   });
   cleanup.push(() => m3.dispose());
   return { m3, statuses };
@@ -83,20 +91,42 @@ describe('M3 hand-off with real detection', () => {
     expect(sim.keys()).toBe(2);
   });
 
-  it('reports a clear error when the shortcut never works', async () => {
+  it('reports a clear error when nothing works (shortcut ignored and the direct fallback is off)', async () => {
     const sim = fakeM3({ visible: true, ignoreKeys: 99 });
-    const { m3 } = make(sim);
+    const { m3 } = make(sim, true, { directFallback: false });
     const r = await m3.hide();
     expect(r.ok).toBe(false);
-    expect(r.error).toMatch(/still showing/);
+    expect(r.error).toMatch(/did not react to the shortcut/);
     expect(r.error).toMatch(/Media Window/);
     expect(sim.keys()).toBe(2);
   });
 
-  it('still sends the shortcut when M3\'s own window cannot be brought forward (it is a global shortcut)', async () => {
-    const sim = fakeM3({ visible: true, focusOk: false });
+  it('when M3 ignores the shortcut it hides the media window directly, so it can never stay on top', async () => {
+    const sim = fakeM3({ visible: true, ignoreKeys: 99 });
+    const { m3, statuses } = make(sim);
+    const r = await m3.hide();
+    expect(r).toMatchObject({ ok: true, media: 'hidden' });
+    expect(sim.keys()).toBe(2); // the shortcut was tried twice first
+    expect(statuses.some((s) => String(s.note ?? '').includes('hidden directly'))).toBe(true);
+    expect(m3.needsRestore()).toBe(true);
+  });
+
+  it('a window it hid directly is shown directly again (M3 never knew about it), without more shortcuts', async () => {
+    const sim = fakeM3({ visible: true, ignoreKeys: 99 });
     const { m3 } = make(sim);
-    expect(await m3.hide()).toMatchObject({ ok: true, media: 'hidden' });
+    await m3.hide();
+    const keysBefore = sim.keys();
+    expect(await m3.show()).toMatchObject({ ok: true, media: 'shown' });
+    expect(sim.keys()).toBe(keysBefore);
+    expect(m3.needsRestore()).toBe(false);
+  });
+
+  it('never touches M3\'s own controller window (no focus step at all)', async () => {
+    const sim = fakeM3({ visible: true });
+    const { m3 } = make(sim);
+    await m3.hide();
+    await m3.show();
+    expect(sim.calls).not.toContain('focus');
   });
 
   it('does not try to restore a media window that M3 closed in the meantime', async () => {
@@ -172,12 +202,52 @@ describe('guard while a countdown runs', () => {
     expect(sim.keys()).toBe(0);
   });
 
-  it('keeps trying, and keeps reporting, if M3 refuses to hide', async () => {
+  it('gives up with a clear message instead of hammering the keyboard when nothing can hide M3', async () => {
+    const sim = fakeM3({ visible: true, ignoreKeys: 999, directWorks: false });
+    const { m3, statuses } = make(sim);
+    m3.startGuard();
+    await until(() => statuses.some((s) => String(s.note ?? '').includes('could not be hidden')), 15000);
+    const keysAtGiveUp = sim.keys();
+    // 3 cycles x 2 attempts, then it stops: no more presses afterwards
+    expect(keysAtGiveUp).toBeLessThanOrEqual(6);
+    await sleep(400);
+    expect(sim.keys()).toBe(keysAtGiveUp);
+  }, 20000);
+});
+
+describe('Settings > M3 > Test', () => {
+  it('shortcut works: reports it and leaves M3 as it was', async () => {
+    const sim = fakeM3({ visible: true });
+    const { m3 } = make(sim);
+    const r = await m3.test();
+    expect(r).toMatchObject({ result: 'shortcut-ok', before: 'shown', shortcut: 'Alt + Shift + F3' });
+    expect(sim.win.visible).toBe(true);
+    expect(sim.keys()).toBe(2); // once to test, once to put it back
+  });
+
+  it('shortcut ignored but the direct method works: says so (and restores)', async () => {
     const sim = fakeM3({ visible: true, ignoreKeys: 99 });
     const { m3 } = make(sim);
-    m3.startGuard();
-    await until(() => sim.keys() >= 4 && !m3.status().ok); // two full attempts, twice
-    expect(m3.status().error).toMatch(/still showing/);
+    const r = await m3.test();
+    expect(r.result).toBe('direct-only');
+    expect(sim.win.visible).toBe(true);
+  });
+
+  it('nothing works: says so', async () => {
+    const sim = fakeM3({ visible: true, ignoreKeys: 99, directWorks: false });
+    const { m3 } = make(sim);
+    expect((await m3.test()).result).toBe('nothing-works');
+  });
+
+  it('no media window / unreadable / standalone', async () => {
+    expect((await make(fakeM3({ exists: false })).m3.test()).result).toBe('no-window');
+    expect((await make(fakeM3({ stateWorks: false })).m3.test()).result).toBe('cannot-read');
+    expect((await make(fakeM3({ visible: true }), false).m3.test()).result).toBe('off');
+  });
+
+  it('lists the windows it found (for the log and the result)', async () => {
+    const r = await make(fakeM3({ visible: true })).m3.test();
+    expect(String(r.windows)).toContain('Media Player - M3');
   });
 });
 

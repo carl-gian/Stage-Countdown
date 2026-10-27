@@ -68,3 +68,10 @@ In OBS: Tools -> WebSocket Server Settings -> enable (note port and password). M
 - [ ] Open the app at its default size (and drag the window shorter, down to its minimum) with the update badge, the M³ row and the OBS row all showing: the minutes and seconds boxes (with + and -) stay fully visible, the ring shrinks to fit, and Start is always in view.
 - [ ] OBS scene switching on and OBS connected: the "Close after timer ends" button shows a lock and cannot be clicked; if it was on, it turns itself off when OBS connects.
 - [ ] OBS closed or scene switching off: the button works again and the app still quits after a countdown when it is on.
+
+## 1.0.5: M3 shortcut test and fallback
+- [ ] Settings > M³ > **Test the shortcut** with M³'s media window open and showing: green "It works" (M³ briefly hides and is put back). Then with a wrong shortcut typed in Stage Countdown: amber "M³ ignored ... direct method works".
+- [ ] With the shortcut deliberately different from M³'s: Start still hides M³'s media display (a "hidden directly" note appears), the timer is never covered, and at the end M³'s media display comes back.
+- [ ] While counting, bring M³'s media display back by hand: it is hidden again within a few seconds, and the log shows only a few presses (not one every few seconds forever).
+- [ ] Open the log (tray > Open logs folder): each M³ action shows "sending the shortcut Alt + Shift + F3 (virtual key 114)" and, on failures, the list of windows found. No "FAIL focus" / "nowindow" lines any more.
+- [ ] M³'s own controller window ("Meeting media - M³") is never brought forward or moved by the app.

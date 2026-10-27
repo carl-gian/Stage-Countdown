@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey } = require('../electron/logic.cjs');
+const { DEFAULT_CONFIG, deepMerge, shortcutToKeys, scheduleDueKey, describeShortcut } = require('../electron/logic.cjs');
 
 describe('deepMerge', () => {
   it('merges nested objects without mutating the base', () => {
@@ -65,5 +65,13 @@ describe('scheduleDueKey', () => {
 
   it('ignores an empty time slot', () => {
     expect(scheduleDueKey({ ...schedule, time1: '' }, at(0, 0))).toBeNull();
+  });
+});
+
+describe('describeShortcut', () => {
+  it('writes the shortcut in words', () => {
+    expect(describeShortcut(undefined)).toBe('Alt + Shift + F3');
+    expect(describeShortcut({ ctrl: true, alt: false, shift: false, code: 'KeyY' })).toBe('Ctrl + Y');
+    expect(describeShortcut({ ctrl: false, alt: true, shift: true, code: 'Digit5' })).toBe('Alt + Shift + 5');
   });
 });

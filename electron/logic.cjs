@@ -16,7 +16,8 @@ const DEFAULT_CONFIG = {
   // Optional OBS scene switching. The WebSocket password is NOT here: see obsPasswordEnc.
   obs: { enabled: false, port: 4455, mediaScene: '', cameraScene: '', returnMode: 'camera' },
   // Meeting Media Manager hand-off. Off = a standalone countdown (nothing is hidden/shown, no shortcut is sent).
-  m3: { enabled: true },
+  // directFallback: if M3 ignores the shortcut, hide/show its media window directly (Win32) so it can never stay on top.
+  m3: { enabled: true, directFallback: true },
   lastSeenVersion: '',
   obsPasswordEnc: '',
 };
@@ -104,7 +105,16 @@ function launchKind(lastSeen, current) {
   return compareVersions(current, lastSeen) > 0 ? 'updated' : 'normal';
 }
 
+/** "Shift + Alt + F3": the shortcut in words, for logs and messages. */
+function describeShortcut(shortcut) {
+  const s = { ctrl: false, alt: true, shift: true, code: 'F3', ...(shortcut || {}) };
+  const code = String(s.code || '');
+  const key = code.startsWith('Key') ? code.slice(3) : code.startsWith('Digit') ? code.slice(5) : code;
+  return [s.ctrl && 'Ctrl', s.alt && 'Alt', s.shift && 'Shift', key].filter(Boolean).join(' + ');
+}
+
 module.exports = {
+  describeShortcut,
   compareVersions,
   launchKind,
   chooseFadeTransition,
