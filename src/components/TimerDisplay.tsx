@@ -1,4 +1,5 @@
-import { useId, useLayoutEffect, useRef } from 'react';
+import { useContext, useId, useLayoutEffect, useRef } from 'react';
+import { FitSizeContext } from '@/lib/fitSize';
 import { type VisualSettings } from '@/types';
 import { formatCountdown } from '@/lib/time';
 
@@ -28,7 +29,9 @@ export default function TimerDisplay({
   windowSize,
   hideStatus = false,
 }: TimerDisplayProps) {
-  const size = Math.min(windowSize.width, windowSize.height) * 0.6;
+  // The controller provides the ring size that fits its free space; the stage sizes from its (full-screen) window.
+  const fit = useContext(FitSizeContext);
+  const size = fit ?? Math.min(windowSize.width, windowSize.height) * 0.6;
   // Pixel settings are defined at the 1080p stage ring and scale with the ring, so the controller
   // preview, the Settings preview and the stage all look the same.
   const k = size / REFERENCE_RING_PX;

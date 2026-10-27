@@ -471,7 +471,7 @@ function createWindow(startHidden = false) {
     width: 520,
     height: 720,
     minWidth: 380,
-    minHeight: 480,
+    minHeight: 600, // the controller stacks several status rows; below this the ring and inputs get cramped
     resizable: true,
     alwaysOnTop: true,
     frame: true,
@@ -764,8 +764,16 @@ ipcMain.handle('close-stage-window', () => {
 });
 
 ipcMain.handle('close-app', () => {
+  // Never quit by this route while connected to OBS (scene switching and the dock need the app running; the UI blocks
+  // the option too, this is the safety net).
+  const o = obs.status();
+  if (o.enabled && o.state === 'connected') {
+    log.info('close-app ignored: connected to OBS');
+    return false;
+  }
   quitting = true;
   app.quit();
+  return true;
 });
 
 ipcMain.on('sync-state-to-stage', (_event, data) => {

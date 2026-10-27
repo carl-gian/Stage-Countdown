@@ -14,7 +14,8 @@ import {
   SkipForward,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { FitSizeContext, fitRing } from '@/lib/fitSize';
 import type { TimerState, VisualSettings } from '@/types';
 
 interface ControllerProps {
@@ -249,10 +250,26 @@ export default function Controller({
 
   const canEdit = state === 'idle' || state === 'complete';
 
+  // Measure the space left for the ring (between the header/time inputs and the buttons) so it always fits.
+  const ringAreaRef = useRef<HTMLDivElement>(null);
+  const [ringSize, setRingSize] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = ringAreaRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setRingSize(fitRing(r.width, r.height));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2">
           <Clock size={16} className="text-gray-400" />
           <span className="text-sm font-mono font-semibold text-gray-200 tabular-nums">
@@ -303,7 +320,7 @@ export default function Controller({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex flex-col items-center gap-1.5 px-5 py-3 border-b border-white/5 overflow-hidden"
+            className="flex flex-col items-center gap-1.5 px-5 py-3 border-b border-white/5 overflow-hidden shrink-0"
           >
             <div
               className={`flex items-center justify-center gap-6 transition-opacity ${
@@ -338,12 +355,12 @@ export default function Controller({
       </AnimatePresence>
 
       {/* Timer display area */}
-      <div className="flex-1 flex items-center justify-center">
-        {children}
+      <div ref={ringAreaRef} className="flex-1 min-h-0 flex items-center justify-center">
+        <FitSizeContext.Provider value={ringSize}>{children}</FitSizeContext.Provider>
       </div>
 
       {/* Control buttons */}
-      <div className="px-5 py-4 border-t border-white/5">
+      <div className="px-5 py-4 border-t border-white/5 shrink-0">
         <AnimatePresence mode="wait">
           {phase ? (
             <motion.div

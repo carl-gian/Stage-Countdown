@@ -9,6 +9,7 @@ import { useCountdownTimer, saveVisualSettings } from '@/hooks/useCountdownTimer
 import { DEFAULT_VISUAL_SETTINGS, mergeVisual, type StageState, type VisualSettings } from '@/types';
 import { nextOccurrence } from '@/lib/time';
 import { m3Label, M3_BADGE_PREFIX } from '@/lib/m3label';
+import { autoCloseBlockedByObs, AUTO_CLOSE_BLOCKED_HINT, AUTO_CLOSE_BLOCKED_TEXT } from '@/lib/autoClose';
 import { SEQUENCE, START_LEAD_MS } from '@/lib/sequence';
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -100,6 +101,18 @@ function ControllerView() {
       .then((r) => setObsNote(r.ok || r.skipped ? '' : (r.error ?? 'OBS scene switch failed')))
       .catch(() => {});
   }, []);
+
+  // "Close after timer ends" is unavailable (and forced off) while connected to OBS: see src/lib/autoClose.ts.
+  const autoCloseBlocked = autoCloseBlockedByObs(obsStatus);
+  const autoCloseBlockedRef = useRef(autoCloseBlocked);
+  autoCloseBlockedRef.current = autoCloseBlocked;
+  useEffect(() => {
+    if (autoCloseBlocked) {
+      setAutoClose(false);
+      setQuitAt(null);
+      setPendingCloseReconfirm(false);
+    }
+  }, [autoCloseBlocked]);
 
   const cancelPendingObsMedia = useCallback(() => {
     if (obsMediaTimerRef.current) clearTimeout(obsMediaTimerRef.current);
@@ -245,7 +258,7 @@ function ControllerView() {
       busyRef.current = true;
       setQuitAt(null);
       try {
-        if (opts?.interactive !== false && pendingCloseReconfirm) {
+        if (opts?.interactive !== false && pendingCloseReconfirm && !autoCloseBlockedRef.current) {
           const keep = await askConfirm(
             'The last countdown was stopped early while "Close StageCountdown after Timer ends" was on.\n\nKeep it enabled for this countdown?'
           );
@@ -370,7 +383,7 @@ function ControllerView() {
         busyRef.current = false;
         setPhase(null);
       }
-      if (closeAfter) setQuitAt(shortcutAt + e.quitAfterShortcutMs);
+      if (closeAfter && !autoCloseBlockedRef.current) setQuitAt(shortcutAt + e.quitAfterShortcutMs);
     },
     [handBackToM3, skippableDelay, cancelPendingObsMedia]
   );
@@ -391,13 +404,15 @@ function ControllerView() {
     const id = setInterval(() => {
       if (Date.now() >= quitAt) {
         clearInterval(id);
-        window.electronAPI?.closeApp?.();
+        if (!autoCloseBlockedRef.current) window.electronAPI?.closeApp?.();
+        else setQuitAt(null); // OBS connected meanwhile: stay running
       }
     }, 100);
     return () => clearInterval(id);
   }, [quitAt]);
 
   const handleAutoCloseButton = useCallback(() => {
+    if (autoCloseBlockedRef.current) return;
     if (quitAt !== null) {
       setQuitAt(null); // cancel the pending close
       setAutoClose(false);
@@ -581,7 +596,7 @@ function ControllerView() {
             </button>
           </div>
 
-          <AutoCloseButton autoClose={autoClose} quitAt={quitAt} onClick={handleAutoCloseButton} />
+          <AutoCloseButton autoClose={autoClose} quitAt={quitAt} blocked={autoCloseBlocked} onClick={handleAutoCloseButton} />
 
           {update && (update.status === 'ready' || update.status === 'downloading') && (
             <UpdateBadge update={update} />
@@ -739,13 +754,25 @@ function StageView() {
   );
 }
 
-function AutoCloseButton({ autoClose, quitAt, onClick }: { autoClose: boolean; quitAt: number | null; onClick: () => void }) {
+function AutoCloseButton({ autoClose, quitAt, blocked, onClick }: { autoClose: boolean; quitAt: number | null; blocked: boolean; onClick: () => void }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (quitAt === null) return;
     const id = setInterval(() => setNow(Date.now()), 200);
     return () => clearInterval(id);
   }, [quitAt]);
+
+  if (blocked) {
+    return (
+      <button
+        disabled
+        title={AUTO_CLOSE_BLOCKED_HINT}
+        className="w-full py-2 rounded-lg text-sm font-semibold border bg-black/40 text-gray-500 border-white/5 cursor-not-allowed"
+      >
+        🔒 {AUTO_CLOSE_BLOCKED_TEXT}
+      </button>
+    );
+  }
 
   if (quitAt !== null) {
     const secs = Math.max(0, Math.ceil((quitAt - now) / 1000));

@@ -109,7 +109,7 @@ interface Window {
     obsSwitch: (kind: 'media' | 'return', fadeMs: number) => Promise<ObsSwitchResult>;
     onObsStatus: (callback: (status: ObsStatus) => void) => () => void;
     closeStageWindow: () => Promise<boolean>;
-    closeApp: () => Promise<void>;
+    closeApp: () => Promise<boolean>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getConfig: () => Promise<any>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

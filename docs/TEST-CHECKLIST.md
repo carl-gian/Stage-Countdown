@@ -63,3 +63,8 @@ In OBS: Tools -> WebSocket Server Settings -> enable (note port and password). M
 - [ ] OBS "previous scene" mode: put OBS on any scene (not the camera), Start: OBS fades to Media Display and the controller's OBS row names the remembered scene. After the countdown OBS returns to THAT scene, not the Camera scene.
 - [ ] Previous-scene mode: switch OBS by hand to another scene mid-countdown: at the end OBS stays where you put it. Press Stop within the first second: OBS never moved and stays where it was.
 - [ ] Camera-scene mode (default) still returns to the Camera scene.
+
+## 1.0.4: controller layout and auto-close vs OBS
+- [ ] Open the app at its default size (and drag the window shorter, down to its minimum) with the update badge, the M³ row and the OBS row all showing: the minutes and seconds boxes (with + and -) stay fully visible, the ring shrinks to fit, and Start is always in view.
+- [ ] OBS scene switching on and OBS connected: the "Close after timer ends" button shows a lock and cannot be clicked; if it was on, it turns itself off when OBS connects.
+- [ ] OBS closed or scene switching off: the button works again and the app still quits after a countdown when it is on.

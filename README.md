@@ -166,7 +166,7 @@ All timings live in one file, [`src/lib/sequence.ts`](src/lib/sequence.ts), and 
 | +13.5 s | M³'s shortcut is sent: M³'s media display fades in **on top of** the black window; the app checks it really came back |
 | +14.2 s | The (now hidden) timer window closes underneath M³ |
 | +14.5 s | *(OBS on)* OBS fades (2 s) back to the Camera scene or the previous scene: **the last step** |
-| +18.5 s | If **Close Stage Countdown after timer ends** is on, the app quits (5 s after the shortcut; the button counts down, click it to cancel) |
+| +18.5 s | If **Close Stage Countdown after timer ends** is on, the app quits (5 s after the shortcut; the button counts down, click it to cancel). **This option is unavailable (locked off) while the app is connected to OBS**, because OBS scene switching and the dock need the app running. |
 
 **Stop** is the same hand-back, starting straight away with no 10-second hold, and it never quits the app. With M³ control switched off the 3-second black hold is skipped.
 

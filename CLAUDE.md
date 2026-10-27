@@ -46,7 +46,7 @@ if you change one on purpose (owner's request only), update the test too.
 | Complete | 00:00 held **10 s** (heartbeat at the start; "Back to M³ now" skips) → HAND-BACK |
 | Stop | stop timer → HAND-BACK straight away |
 | HAND-BACK (end and stop) | guard off → timer window fades to black (500 ms) → **plain black 3000 ms** (skipped if M³ control is off) → **shortcut** (M³'s media display fades in OVER our black window, verified) → our window closed 700 ms after the shortcut → OBS (optional) fades back 1000 ms after the shortcut (2000 ms fade): the LAST step |
-| Auto-close | if "Close StageCountdown after Timer ends" is on: the app quits **5 s after that shortcut**; the button shows "Closing in Ns · click to cancel" |
+| Auto-close | if "Close StageCountdown after Timer ends" is on: the app quits **5 s after that shortcut**; the button shows "Closing in Ns · click to cancel". **Unavailable while connected to OBS** (`src/lib/autoClose.ts`): the button is locked and forced off, and main's `close-app` refuses too. |
 | Restart while paused | restarts in place (stage already up, M³ already hidden) — no sequence |
 
 "Countdown to Time" is sized when counting actually begins, so it still ends exactly on the target.

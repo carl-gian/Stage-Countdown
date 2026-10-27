@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.4',
+    date: '2026-10-28',
+    items: [
+      'Fixed: the minutes and seconds boxes could be squashed or hidden behind the ring on the controller. The ring now measures the space that is left and fits it, and the window can no longer be made too short.',
+      '"Close Stage Countdown after the timer ends" is now unavailable while the app is connected to OBS (it is switched off and shows a lock). OBS scene switching and the OBS dock need the app to keep running, so the two conflicted.',
+    ],
+  },
+  {
     version: '1.0.3',
     date: '2026-10-28',
     items: [
