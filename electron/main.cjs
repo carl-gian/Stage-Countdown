@@ -498,7 +498,7 @@ function createWindow(startHidden = false) {
     }
     if (closingRestore) return;
     // Also put OBS back on the camera scene if we left it on the media scene.
-    const obsBack = obs.restoreCameraIfNeeded();
+    const obsBack = obs.restoreIfNeeded();
     m3.stopGuard();
     if (m3.needsRestore() || obs.status().state === 'connected') {
       event.preventDefault();
@@ -725,6 +725,7 @@ ipcMain.handle('obs-save-settings', async (_event, settings) => {
       port: Number.isInteger(port) && port >= 1 && port <= 65535 ? port : 4455,
       mediaScene: String(settings?.mediaScene ?? ''),
       cameraScene: String(settings?.cameraScene ?? ''),
+      returnMode: settings?.returnMode === 'previous' ? 'previous' : 'camera',
     },
   };
   if (typeof settings?.password === 'string') patch.obsPasswordEnc = sealSecret(settings.password, secretBox());
@@ -751,7 +752,7 @@ ipcMain.handle('obs-refresh', () => {
 });
 
 ipcMain.handle('obs-switch', (_event, kind, fadeMs) =>
-  obs.switchTo(kind === 'media' ? 'media' : 'camera', Math.max(0, Math.min(10_000, Number(fadeMs) || 0)))
+  obs.switchTo(kind === 'media' ? 'media' : 'return', Math.max(0, Math.min(10_000, Number(fadeMs) || 0)))
 );
 
 ipcMain.handle('close-stage-window', () => {

@@ -26,6 +26,10 @@ interface ObsStatus {
   scenes: string[];
   mediaScene: string;
   cameraScene: string;
+  /** What OBS goes back to when the countdown ends or stops. */
+  returnMode: 'camera' | 'previous';
+  /** The scene OBS was on before the countdown (only while a countdown has it switched away). */
+  previousScene: string;
   version: string;
   error: string;
   /** The OBS custom browser dock server (runs only while OBS switching is on). */
@@ -99,9 +103,10 @@ interface Window {
       password?: string;
       mediaScene: string;
       cameraScene: string;
+      returnMode: 'camera' | 'previous';
     }) => Promise<ObsStatus>;
     obsRefresh: () => Promise<ObsStatus>;
-    obsSwitch: (kind: 'media' | 'camera', fadeMs: number) => Promise<ObsSwitchResult>;
+    obsSwitch: (kind: 'media' | 'return', fadeMs: number) => Promise<ObsSwitchResult>;
     onObsStatus: (callback: (status: ObsStatus) => void) => () => void;
     closeStageWindow: () => Promise<boolean>;
     closeApp: () => Promise<void>;

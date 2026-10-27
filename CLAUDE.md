@@ -44,8 +44,8 @@ if you change one on purpose (owner's request only), update the test too.
 |---|---|
 | Start (manual / scheduled / Countdown to Time) | stage window opened invisibly → **shortcut** (hide M³, verified; guard on) → +500 ms stage goes black (300 ms fade) → black for 1000 ms → 1000 ms transition to the timer showing the full time → 2000 ms → counting starts (4.5 s after the shortcut) |
 | Complete | 00:00 held **10 s** (heartbeat at the start; "Back to M³ now" skips) → HAND-BACK |
-| Stop | stop timer → HAND-BACK straight away; OBS (optional) fades to Camera over **500 ms** |
-| HAND-BACK (end and stop) | guard off → timer window fades to black (500 ms) → timer window **closed** → +100 ms → **shortcut** (show M³, verified) |
+| Stop | stop timer → HAND-BACK straight away |
+| HAND-BACK (end and stop) | guard off → timer window fades to black (500 ms) → **plain black 3000 ms** (skipped if M³ control is off) → **shortcut** (M³'s media display fades in OVER our black window, verified) → our window closed 700 ms after the shortcut → OBS (optional) fades back 1000 ms after the shortcut (2000 ms fade): the LAST step |
 | Auto-close | if "Close StageCountdown after Timer ends" is on: the app quits **5 s after that shortcut**; the button shows "Closing in Ns · click to cancel" |
 | Restart while paused | restarts in place (stage already up, M³ already hidden) — no sequence |
 
@@ -70,6 +70,7 @@ Zoom, so participants see the timer (Media Display scene) and then the camera ag
 - Switching uses the "Fade" transition with the requested duration, handles Studio Mode (preview + Transition), skips if OBS is
   already on that scene, then restores the operator's own transition AND the Fade's own duration (OBS keeps one duration per
   transition). Calls are queued so two switches never interleave. Closing the app while on the media scene sends OBS back to Camera.
+- `obs.returnMode`: `'camera'` (default) or `'previous'`. In `'previous'` mode `obs.cjs` remembers OBS's program scene when it switches to the media scene (`previousScene`, shown in status) and returns to it; it skips (leaves OBS alone) if nothing was remembered or the operator moved OBS elsewhere, and falls back to the Camera scene only if the remembered scene was deleted. The renderer calls `obsSwitch('return', ms)`.
 - OBS problems never stop a countdown: they show in the "OBS:" row of the controller. Timings: `SEQUENCE.obs` (pinned by tests).
 - `tests/obs.test.ts` runs the module against a fake OBS server; run real-OBS checks from `docs/TEST-CHECKLIST.md`.
 

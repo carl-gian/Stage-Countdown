@@ -100,7 +100,8 @@ export const HELP_TOPICS: HelpTopic[] = [
         heading: 'While the countdown runs',
         paragraphs: [
           'From the moment the countdown starts until it ends or you press Stop, the app keeps an eye on M³\'s media display. If it ever comes back on top of the timer (for example M³ shows a song or a picture), the app sends the shortcut again to hide it, and the row says "M³ was showing on top of the timer — hid it again". If you really need M³ on screen, press Stop first.',
-          'When the countdown ends (or you press Stop), the timer window fades to black, closes, and then the shortcut brings M³\'s media display back. The app only brings it back if it was the one that hid it.',
+          'When the countdown ends (or you press Stop) the way back is deliberately gentle: the timer window fades to black and stays black for 3 seconds, then the shortcut brings M³\'s media display back so it fades in over the black, the timer window closes behind it, and (with OBS on) OBS fades back one second later. The app only brings M³ back if it was the one that hid it.',
+          'For the smoothest result turn on M³\'s own fade: M³ Settings > "Enable Media Window Fade Transitions".',
         ],
       },
       {
@@ -118,7 +119,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     sections: [
       {
         paragraphs: [
-          'Optional. If your meeting goes out through OBS to Zoom, OBS decides what participants see. With this on, a moment after the countdown starts OBS fades to your Media Display scene (the one that shows the timer screen), and when the countdown ends it fades back to your Camera scene. Nobody has to switch scenes by hand.',
+          'Optional. If your meeting goes out through OBS to Zoom, OBS decides what participants see. With this on, a moment after the countdown starts OBS fades to your Media Display scene (the one that shows the timer screen), and once the countdown has ended and M³\'s media display is back, it fades back to your Camera scene, or to the scene OBS was on before. Nobody has to switch scenes by hand.',
         ],
       },
       {
@@ -134,8 +135,8 @@ export const HELP_TOPICS: HelpTopic[] = [
         steps: [
           'Open Settings > OBS Scene Switching and switch it on.',
           'Enter the same port and password. When OBS is detected the status turns green ("Connected to OBS") and your scenes appear.',
-          'Choose the Media Display scene and the Camera scene.',
-          'Press Start. About a second after the timer begins counting, OBS fades to the Media Display scene (1.2 seconds). When the timer ends, OBS fades back to the Camera scene (2 seconds).',
+          'Choose the Media Display scene and the Camera scene. Or, under "When the countdown ends or stops, OBS goes back to", pick "The scene OBS was on before the countdown": the app then remembers whatever scene OBS was on when the countdown took over and returns to it (the Camera scene becomes a fallback).',
+          'Press Start. About a second after the timer begins counting, OBS fades to the Media Display scene (1.2 seconds). When the countdown ends or you press Stop, the timer window fades to black, M³\'s media display comes back, and one second later OBS fades back (2 seconds): going back is always the last step.',
         ],
         tip: 'Turning this on also makes the app start with Windows, hidden in the tray, so scene switching and the dock are ready without anyone opening it. You can turn that off in Settings > Startup & Schedule.',
       },
@@ -143,7 +144,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         heading: 'Good to know',
         paragraphs: [
           'The app keeps looking for OBS every few seconds, so you can open OBS before or after it. If the password is wrong it says so. OBS Studio Mode works too, and your own transition settings are put back afterwards. If OBS cannot be reached the countdown still runs; the "OBS:" row on the controller shows the problem.',
-          'Stopping early sends OBS back to the Camera scene, and so does closing the app during a countdown.',
+          'Closing the app during a countdown also sends OBS back. If you move OBS to a different scene yourself during the countdown, "previous scene" mode leaves your choice alone.',
         ],
       },
     ],

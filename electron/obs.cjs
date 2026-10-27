@@ -1,8 +1,9 @@
 // Optional OBS Studio link (obs-websocket v5, always on this PC). No Electron imports, so it is testable.
 //
 // Purpose: OBS feeds Zoom. When the countdown starts, OBS fades to the "Media Display" scene (which shows
-// the timer on the stage display) and when it ends fades back to the "Camera" scene, so Zoom participants
-// see the timer without anyone switching scenes by hand.
+// the timer on the stage display) and when it ends fades back, so Zoom participants see the timer without anyone
+// switching scenes by hand. "Back" is either a fixed Camera scene or (returnMode 'previous') whichever scene OBS
+// was on just before the countdown took over.
 const { OBSWebSocket } = require('obs-websocket-js/json');
 const { chooseFadeTransition } = require('./logic.cjs');
 
@@ -34,7 +35,7 @@ function withTimeout(promise, ms, what) {
  * @param {number} [deps.retryMs]
  */
 function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } = {}) {
-  let settings = { enabled: false, port: 4455, password: '', mediaScene: '', cameraScene: '' };
+  let settings = { enabled: false, port: 4455, password: '', mediaScene: '', cameraScene: '', returnMode: 'camera' };
   let ws = null;
   let state = 'off'; // off | searching | connecting | connected | auth-failed | error
   let error = '';
@@ -42,7 +43,8 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
   let scenes = [];
   let retryTimer = null;
   let generation = 0; // bumps on every (re)configure so stale connection attempts are ignored
-  let lastKind = null; // 'media' | 'camera': what we last switched OBS to
+  let lastKind = null; // 'media' | 'return': what we last switched OBS to
+  let previousScene = ''; // the scene OBS was on before we switched it to the media scene
   let queue = Promise.resolve();
   let saved = null; // the user's own transition, restored after our fade
   let restoreTimer = null;
@@ -55,6 +57,8 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
     scenes,
     mediaScene: settings.mediaScene,
     cameraScene: settings.cameraScene,
+    returnMode: settings.returnMode,
+    previousScene,
     version,
     error,
   });
@@ -175,10 +179,14 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
     configure({}, { force: true });
   }
 
-  /** Where `kind`'s scene is, or why we can't switch (null = fine). */
+  /**
+   * kind 'media' -> the Media Display scene. kind 'return' -> back to the Camera scene, or (returnMode 'previous') to the
+   * scene OBS was on before the countdown, which is decided later from OBS's live program scene.
+   */
   function resolveScene(kind) {
     if (!settings.enabled) return { skip: 'OBS scene switching is off' };
     if (state !== 'connected') return { skip: 'OBS is not connected' };
+    if (kind === 'return' && settings.returnMode === 'previous') return { returnPrevious: true };
     const scene = kind === 'media' ? settings.mediaScene : settings.cameraScene;
     if (!scene) return { skip: `No ${kind === 'media' ? 'Media Display' : 'Camera'} scene chosen` };
     if (!scenes.includes(scene)) return { error: `Scene "${scene}" no longer exists in OBS` };
@@ -186,7 +194,7 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
   }
 
   async function doSwitch(kind, fadeMs) {
-    const target = resolveScene(kind);
+    let target = resolveScene(kind);
     if (target.skip) return { ok: false, skipped: true, error: target.skip };
     if (target.error) return { ok: false, error: target.error };
 
@@ -197,9 +205,39 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
         call('GetSceneTransitionList'),
         call('GetCurrentProgramScene'),
       ]);
+      const onScene = program.currentProgramSceneName;
 
-      if (program.currentProgramSceneName === target.scene && !studioModeEnabled) {
+      if (kind === 'media' && onScene !== target.scene) {
+        // Remember where OBS was, so "go back to the previous scene" can return there.
+        previousScene = onScene;
+        publish();
+      }
+
+      if (target.returnPrevious) {
+        // Never switched away (e.g. Stop within the first second): OBS is where it was, nothing to return to.
+        if (!previousScene) return { ok: false, skipped: true, error: 'OBS was never switched, so there is nothing to return to' };
+        const usable = previousScene && scenes.includes(previousScene) && previousScene !== settings.mediaScene;
+        if (usable) {
+          if (onScene !== settings.mediaScene) {
+            // The operator already moved OBS elsewhere during the countdown: leave their choice alone.
+            previousScene = '';
+            publish();
+            return { ok: false, skipped: true, error: 'OBS is no longer on the Media Display scene, so it was left where it is' };
+          }
+          target = { scene: previousScene };
+        } else if (settings.cameraScene && scenes.includes(settings.cameraScene)) {
+          target = { scene: settings.cameraScene }; // the remembered scene was deleted: use the fallback
+        } else {
+          return { ok: false, skipped: true, error: 'The previous OBS scene no longer exists and no fallback scene is set' };
+        }
+      }
+
+      if (onScene === target.scene && !studioModeEnabled) {
         lastKind = kind;
+        if (kind === 'return') {
+          previousScene = '';
+          publish();
+        }
         return { ok: true, alreadyThere: true };
       }
 
@@ -225,6 +263,10 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
         await call('SetCurrentProgramScene', { sceneName: target.scene });
       }
       lastKind = kind;
+      if (kind === 'return') {
+        previousScene = '';
+        publish();
+      }
 
       restoreTimer = setTimeout(async () => {
         restoreTimer = null;
@@ -246,16 +288,16 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
     }
   }
 
-  /** Switches OBS to the media or camera scene with a fade. One at a time, in order. */
+  /** Switches OBS to the media scene, or back (camera / previous scene), with a fade. One at a time, in order. */
   function switchTo(kind, fadeMs) {
     const run = queue.then(() => doSwitch(kind, fadeMs));
     queue = run.catch(() => {});
     return run;
   }
 
-  /** Quitting while OBS is on the media scene: put it back on the camera quickly. */
-  function restoreCameraIfNeeded(fadeMs = 800) {
-    return lastKind === 'media' ? switchTo('camera', fadeMs) : Promise.resolve({ ok: true, skipped: true });
+  /** Quitting while OBS is on the media scene: put it back quickly. */
+  function restoreIfNeeded(fadeMs = 800) {
+    return lastKind === 'media' ? switchTo('return', fadeMs) : Promise.resolve({ ok: true, skipped: true });
   }
 
   function dispose() {
@@ -265,7 +307,7 @@ function createObs({ log = () => {}, onStatus = () => {}, retryMs = RETRY_MS } =
     dropSocket();
   }
 
-  return { configure, refresh, switchTo, restoreCameraIfNeeded, status, dispose };
+  return { configure, refresh, switchTo, restoreIfNeeded, status, dispose };
 }
 
 module.exports = { createObs };

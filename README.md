@@ -34,7 +34,7 @@ so that the people watching on Zoom see the timer too, with smooth fades and nob
 - **Count down a length of time** (minutes and seconds) **or to a clock time** ("finish exactly at 18:30").
 - **Works with or without M³.** With M³ it hides M³'s media window while the timer is up and gives it back afterwards. Without M³ it is a plain countdown.
 - **Optional OBS scene switching.** OBS feeds Zoom, so a moment after the countdown starts OBS fades to your *Media Display* scene
-  (which shows the timer) and when it ends fades back to your *Camera* scene. Participants see the timer; the hand-off is seamless.
+  (which shows the timer) and once it has ended and M³'s media display is back fades back to your *Camera* scene (or to the scene OBS was on before). Participants see the timer; the hand-off is seamless.
 - **Optional OBS dock.** A small control panel inside OBS: set the time or a clock time, start, pause, stop, restart.
 - **Lives in the tray.** Closing or minimizing hides it to the system tray so schedules, OBS switching and the dock keep working.
 - **Automatic updates** with a blue "Update ready" badge. It never restarts by itself in the middle of a meeting.
@@ -104,15 +104,17 @@ OBS is what Zoom participants see. With **OBS Scene Switching** on, the app chan
 **In Stage Countdown**
 
 1. *Settings → OBS Scene Switching* → switch it on and enter the same port and password.
-2. When OBS is detected the status turns green (**Connected to OBS**) and your scenes appear in the two drop-downs. Choose the *Media Display* and *Camera* scenes.
+2. When OBS is detected the status turns green (**Connected to OBS**) and your scenes appear in the drop-downs. Choose the *Media Display* and *Camera* scenes. Or choose **"The scene OBS was on before the countdown"** as where OBS goes back to: the app remembers the scene OBS was on when the countdown took over and returns to it (the Camera scene is then only a fallback).
 3. Press **Start**.
 
 | When | What OBS does |
 |---|---|
 | 1 second after the timer starts counting | Fades to the **Media Display** scene (1.2 s fade) |
-| The moment the timer ends | Fades to the **Camera** scene (2 s fade), while the room still sees `00:00` |
-| You press **Stop** early | Goes to the **Camera** scene (and cancels a switch that hasn't happened yet) |
-| You close the app mid-countdown | Goes back to the **Camera** scene first |
+| The countdown ends (after the `00:00` hold) or you press **Stop** | Nothing yet: the timer window fades to black and M³'s media display comes back first |
+| 1 second after M³'s media display is back | Fades back (2 s fade) to the **Camera** scene, or the scene OBS was on before. **This is always the last step.** |
+| You press **Stop** within a second of the count starting | The Media Display switch is cancelled; in "previous scene" mode OBS is left exactly where it was |
+| You close the app mid-countdown | OBS is sent back first |
+| You move OBS to another scene yourself during the countdown | "Previous scene" mode leaves your choice alone |
 
 Good to know:
 
@@ -158,14 +160,15 @@ All timings live in one file, [`src/lib/sequence.ts`](src/lib/sequence.ts), and 
 
 | Time | What happens |
 |---|---|
-| 0 s | `00:00`, a heartbeat pulse. *(OBS on)* OBS starts its 2 s fade to the Camera scene |
+| 0 s | `00:00`, a heartbeat pulse, held for 10 s |
 | +10 s | *(or press **Back to M³ now**)* the timer window fades to black (0.5 s) |
-| +10.5 s | The countdown window closes |
-| +10.6 s | M³'s shortcut is sent, and the app checks that M³'s media display really came back |
-| +15.6 s | If **Close Stage Countdown after timer ends** is on, the app quits (the button counts down; click it to cancel) |
+| +10.5 s → +13.5 s | Plain black for 3 s |
+| +13.5 s | M³'s shortcut is sent: M³'s media display fades in **on top of** the black window; the app checks it really came back |
+| +14.2 s | The (now hidden) timer window closes underneath M³ |
+| +14.5 s | *(OBS on)* OBS fades (2 s) back to the Camera scene or the previous scene: **the last step** |
+| +18.5 s | If **Close Stage Countdown after timer ends** is on, the app quits (5 s after the shortcut; the button counts down, click it to cancel) |
 
-**Stop** hands back the same way, straight away and without the 10-second hold: the timer window fades to black (0.5 s) while *(OBS on)* OBS fades to the
-Camera scene (0.5 s), the window closes, then M³'s shortcut is sent. Stop never quits the app.
+**Stop** is the same hand-back, starting straight away with no 10-second hold, and it never quits the app. With M³ control switched off the 3-second black hold is skipped.
 
 ---
 
@@ -195,7 +198,7 @@ Camera scene (0.5 s), the window closes, then M³'s shortcut is sent. Stop never
 | **Live preview** | The real stage display, so colours/size look exactly like the stage |
 | **Display** | Which screen the countdown uses (*Automatic*, or pick one) |
 | **Meeting Media Manager (M³)** | On/off switch for the M³ hand-off and the shortcut to send |
-| **OBS Scene Switching** | Enable, WebSocket port and password, Media Display and Camera scenes, the dock address and instructions |
+| **OBS Scene Switching** | Enable, WebSocket port and password, Media Display and Camera scenes, where OBS goes back to (Camera scene or the previous scene), the dock address and instructions |
 | **Startup & Schedule** | Start with Windows, start hidden in the tray, scheduled countdowns |
 | **Background / Track ring / Progress ring / Digital text** | Colours, gradient, thickness, glow, font, size, shadow |
 | **Clock format** | 12 h / 24 h for the controller clock |

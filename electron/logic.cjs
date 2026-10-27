@@ -14,7 +14,7 @@ const DEFAULT_CONFIG = {
   autoLaunch: false,
   schedule: { enabled: false, time1: '', time2: '', durationMinutes: 5 },
   // Optional OBS scene switching. The WebSocket password is NOT here: see obsPasswordEnc.
-  obs: { enabled: false, port: 4455, mediaScene: '', cameraScene: '' },
+  obs: { enabled: false, port: 4455, mediaScene: '', cameraScene: '', returnMode: 'camera' },
   // Meeting Media Manager hand-off. Off = a standalone countdown (nothing is hidden/shown, no shortcut is sent).
   m3: { enabled: true },
   lastSeenVersion: '',

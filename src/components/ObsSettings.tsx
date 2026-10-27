@@ -60,6 +60,7 @@ export default function ObsSettings() {
   const [password, setPassword] = useState('');
   const [mediaScene, setMediaScene] = useState('');
   const [cameraScene, setCameraScene] = useState('');
+  const [returnMode, setReturnMode] = useState<'camera' | 'previous'>('camera');
   const [clearPassword, setClearPassword] = useState(false);
   const loaded = useRef(false);
 
@@ -71,19 +72,21 @@ export default function ObsSettings() {
       setPort(String(s.port));
       setMediaScene(s.mediaScene);
       setCameraScene(s.cameraScene);
+      setReturnMode(s.returnMode ?? 'camera');
       loaded.current = true;
     });
     return api.onObsStatus?.(setStatus);
   }, [api]);
 
   const save = useCallback(
-    (next: { enabled: boolean; port: string; password?: string; mediaScene: string; cameraScene: string }) => {
+    (next: { enabled: boolean; port: string; password?: string; mediaScene: string; cameraScene: string; returnMode: 'camera' | 'previous' }) => {
       const n = parseInt(next.port, 10);
       api?.obsSaveSettings({
         enabled: next.enabled,
         port: Number.isInteger(n) ? n : DEFAULT_PORT,
         mediaScene: next.mediaScene,
         cameraScene: next.cameraScene,
+        returnMode: next.returnMode,
         ...(next.password !== undefined ? { password: next.password } : {}),
       });
     },
@@ -94,18 +97,19 @@ export default function ObsSettings() {
   useEffect(() => {
     if (!loaded.current) return;
     const id = setTimeout(
-      () => save({ enabled, port, mediaScene, cameraScene, ...(password || clearPassword ? { password } : {}) }),
+      () => save({ enabled, port, mediaScene, cameraScene, returnMode, ...(password || clearPassword ? { password } : {}) }),
       600
     );
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [port, password, clearPassword]);
 
-  const commit = (patch: Partial<{ enabled: boolean; mediaScene: string; cameraScene: string }>) => {
-    const next = { enabled, mediaScene, cameraScene, ...patch };
+  const commit = (patch: Partial<{ enabled: boolean; mediaScene: string; cameraScene: string; returnMode: 'camera' | 'previous' }>) => {
+    const next = { enabled, mediaScene, cameraScene, returnMode, ...patch };
     if (patch.enabled !== undefined) setEnabled(patch.enabled);
     if (patch.mediaScene !== undefined) setMediaScene(patch.mediaScene);
     if (patch.cameraScene !== undefined) setCameraScene(patch.cameraScene);
+    if (patch.returnMode !== undefined) setReturnMode(patch.returnMode);
     save({ ...next, port, ...(password || clearPassword ? { password } : {}) });
   };
 
@@ -121,9 +125,9 @@ export default function ObsSettings() {
     <div className="space-y-3">
       <p className="text-[11px] leading-relaxed text-gray-400">
         <b className="text-gray-300">Optional.</b> OBS is what Zoom participants see. When this is on, a moment after the
-        countdown starts OBS fades to your <i>Media Display</i> scene (the one showing the timer on the stage display), and when the
-        countdown ends it fades back to your <i>Camera</i> scene. The hand-off is seamless, so everyone in Zoom sees the timer
-        and nobody has to switch scenes by hand.
+        countdown starts OBS fades to your <i>Media Display</i> scene (the one showing the timer on the stage display), and once the
+        countdown has ended and the media display is back it fades back to your <i>Camera</i> scene, or to whatever scene OBS was on
+        before. The hand-off is seamless, so everyone in Zoom sees the timer and nobody has to switch scenes by hand.
       </p>
 
       <label className="flex items-center justify-between gap-4 cursor-pointer">
@@ -196,13 +200,37 @@ export default function ObsSettings() {
           disabled={!connected && scenes.length === 0 && !mediaScene}
           onChange={(v) => commit({ mediaScene: v })}
         />
+        <div className="space-y-1.5 pt-1">
+          <span className="text-xs text-gray-400">When the countdown ends or stops, OBS goes back to:</span>
+          {([
+            ['camera', 'The Camera scene'],
+            ['previous', 'The scene OBS was on before the countdown'],
+          ] as const).map(([mode, label]) => (
+            <label key={mode} className="flex items-center gap-2 cursor-pointer text-xs text-gray-200">
+              <input
+                type="radio"
+                name="obs-return-mode"
+                checked={returnMode === mode}
+                onChange={() => commit({ returnMode: mode })}
+                className="accent-emerald-500"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
         <SceneSelect
-          label="Camera scene"
+          label={returnMode === 'camera' ? 'Camera scene' : 'Fallback scene'}
           value={cameraScene}
           scenes={scenes}
           disabled={!connected && scenes.length === 0 && !cameraScene}
           onChange={(v) => commit({ cameraScene: v })}
         />
+        {returnMode === 'previous' && (
+          <p className="text-[11px] text-gray-500">
+            The app remembers the scene OBS is on when the countdown takes over{status?.previousScene ? ` (now: ${status.previousScene})` : ''} and returns to it.
+            The fallback scene is only used if that scene no longer exists. If you move OBS to another scene yourself during the countdown, it is left alone.
+          </p>
+        )}
         <p className="text-[11px] text-gray-500">
           In OBS: Tools → WebSocket Server Settings → enable it, then use the same port and password here. Scenes appear once OBS is detected.
         </p>

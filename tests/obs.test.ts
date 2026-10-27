@@ -10,6 +10,7 @@ const { chooseFadeTransition, sealSecret, openSecret } = require('../electron/lo
 /** A minimal obs-websocket v5 (JSON, no password) that records every request it gets. */
 function fakeObs(opts: { studioMode?: boolean; program?: string; transition?: string } = {}) {
   const calls: { type: string; data?: Record<string, unknown> }[] = [];
+  let scenesOverride: string[] | null = null;
   const state = {
     program: opts.program ?? 'Camera',
     transition: opts.transition ?? 'Cut',
@@ -26,11 +27,10 @@ function fakeObs(opts: { studioMode?: boolean; program?: string; transition?: st
   });
   const handle = (type: string, data: Record<string, unknown> = {}): Record<string, unknown> | null => {
     switch (type) {
-      case 'GetSceneList':
-        return {
-          currentProgramSceneName: state.program,
-          scenes: [{ sceneName: 'Other', sceneIndex: 2 }, { sceneName: 'Media', sceneIndex: 1 }, { sceneName: 'Camera', sceneIndex: 0 }],
-        };
+      case 'GetSceneList': {
+        const names = scenesOverride ?? ['Other', 'Media', 'Camera'];
+        return { currentProgramSceneName: state.program, scenes: names.map((sceneName, i) => ({ sceneName, sceneIndex: names.length - 1 - i })) };
+      }
       case 'GetStudioModeEnabled':
         return { studioModeEnabled: state.studio };
       case 'GetCurrentProgramScene':
@@ -74,7 +74,7 @@ function fakeObs(opts: { studioMode?: boolean; program?: string; transition?: st
     });
   });
   const port = () => (wss.address() as AddressInfo).port;
-  return { wss, calls, state, port, close: () => new Promise<void>((r) => { wss.clients.forEach((c) => c.terminate()); wss.close(() => r()); }) };
+  return { wss, calls, state, port, set scenesOverride(v: string[] | null) { scenesOverride = v; }, close: () => new Promise<void>((r) => { wss.clients.forEach((c) => c.terminate()); wss.close(() => r()); }) };
 }
 
 const until = async (cond: () => boolean, ms = 3000) => {
@@ -165,7 +165,7 @@ describe('OBS link', () => {
     cleanup.push(server.close);
     const obs = await connected(server);
     server.calls.length = 0;
-    await obs.switchTo('camera', 100);
+    await obs.switchTo('return', 100);
     const types = server.calls.map((c) => c.type);
     expect(types).toContain('SetCurrentPreviewScene');
     expect(types).toContain('TriggerStudioModeTransition');
@@ -177,7 +177,7 @@ describe('OBS link', () => {
     cleanup.push(server.close);
     const obs = await connected(server);
     server.calls.length = 0;
-    expect(await obs.switchTo('camera', 100)).toEqual({ ok: true, alreadyThere: true });
+    expect(await obs.switchTo('return', 100)).toEqual({ ok: true, alreadyThere: true });
     expect(server.calls.some((c) => c.type.startsWith('Set'))).toBe(false);
   });
 
@@ -190,12 +190,70 @@ describe('OBS link', () => {
     expect(await obs.switchTo('media', 100)).toMatchObject({ ok: false, error: expect.stringContaining('Deleted') });
   });
 
+  it('returnMode "previous": remembers the scene OBS was on and goes back to it', async () => {
+    const server = fakeObs({ program: 'Other' });
+    cleanup.push(server.close);
+    const obs = await connected(server, { returnMode: 'previous' });
+    await obs.switchTo('media', 50);
+    expect(server.state.program).toBe('Media');
+    expect(obs.status().previousScene).toBe('Other');
+
+    const back = await obs.switchTo('return', 50);
+    expect(back).toEqual({ ok: true });
+    expect(server.state.program).toBe('Other'); // not the Camera scene
+    expect(obs.status().previousScene).toBe(''); // consumed
+  });
+
+  it('returnMode "previous": leaves OBS alone if the operator moved it during the countdown', async () => {
+    const server = fakeObs({ program: 'Other' });
+    cleanup.push(server.close);
+    const obs = await connected(server, { returnMode: 'previous' });
+    await obs.switchTo('media', 50);
+    server.state.program = 'Camera'; // operator switched by hand
+    const back = await obs.switchTo('return', 50);
+    expect(back).toMatchObject({ ok: false, skipped: true });
+    expect(server.state.program).toBe('Camera');
+  });
+
+  it('returnMode "previous": does nothing if the countdown never switched OBS (e.g. Stop within a second)', async () => {
+    const server = fakeObs({ program: 'Other' });
+    cleanup.push(server.close);
+    const obs = await connected(server, { returnMode: 'previous' });
+    server.calls.length = 0;
+    expect(await obs.switchTo('return', 50)).toMatchObject({ ok: false, skipped: true });
+    expect(server.calls.some((c) => c.type.startsWith('Set'))).toBe(false);
+  });
+
+  it('returnMode "previous": uses the fallback scene if the remembered scene was deleted', async () => {
+    const server = fakeObs({ program: 'Other' });
+    cleanup.push(server.close);
+    const obs = await connected(server, { returnMode: 'previous' });
+    await obs.switchTo('media', 50);
+    // OBS now lists only Camera and Media (the remembered "Other" was deleted)
+    server.wss.clients.forEach((c) =>
+      c.send(JSON.stringify({ op: 5, d: { eventType: 'SceneListChanged', eventIntent: 4, eventData: {} } }))
+    );
+    server.scenesOverride = ['Media', 'Camera'];
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await obs.switchTo('return', 50)).toEqual({ ok: true });
+    expect(server.state.program).toBe('Camera');
+  });
+
+  it('returnMode "camera" (default) is unchanged: always the Camera scene', async () => {
+    const server = fakeObs({ program: 'Other' });
+    cleanup.push(server.close);
+    const obs = await connected(server);
+    await obs.switchTo('media', 50);
+    await obs.switchTo('return', 50);
+    expect(server.state.program).toBe('Camera');
+  });
+
   it('puts OBS back on the camera when the app closes mid-countdown', async () => {
     const server = fakeObs();
     cleanup.push(server.close);
     const obs = await connected(server);
     await obs.switchTo('media', 50);
-    await obs.restoreCameraIfNeeded(50);
+    await obs.restoreIfNeeded(50);
     expect(server.state.program).toBe('Camera');
   });
 });

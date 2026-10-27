@@ -55,3 +55,11 @@ In OBS: Tools -> WebSocket Server Settings -> enable (note port and password). M
 - [ ] Wrong shortcut in Stage Countdown (different from M³'s): the row shows a red "still showing after sending the shortcut" message and the countdown still runs.
 - [ ] If M³'s media window was already hidden before Start, it stays hidden afterwards (the app only brings back what it hid).
 - [ ] M³ controller ("Meeting media - M³") on the operator screen is not moved or hidden by the app (it may be brought forward when the shortcut is sent).
+
+## 1.0.2: smoother hand-back and "previous scene"
+- [ ] Press Stop mid-count (and let one finish): the timer fades to black, the screen stays plain black ~3 s, M³'s media display fades IN over the black (no desktop, no cut), the timer window disappears underneath, and ~1 s after M³ is back OBS fades to the camera. Nothing about it feels abrupt.
+- [ ] If M³'s fade is on (M³ Settings > Enable Media Window Fade Transitions) it is smoother still. Note any step that still looks abrupt and which one.
+- [ ] Zoom (via OBS) keeps showing the timer/black until M³ is back; the camera comes back last.
+- [ ] OBS "previous scene" mode: put OBS on any scene (not the camera), Start: OBS fades to Media Display and the controller's OBS row names the remembered scene. After the countdown OBS returns to THAT scene, not the Camera scene.
+- [ ] Previous-scene mode: switch OBS by hand to another scene mid-countdown: at the end OBS stays where you put it. Press Stop within the first second: OBS never moved and stays where it was.
+- [ ] Camera-scene mode (default) still returns to the Camera scene.

@@ -93,7 +93,7 @@ function ControllerView() {
   }, []);
 
   /** Fire-and-forget: OBS problems are shown in the OBS row, never stop the countdown. */
-  const obsSwitch = useCallback((kind: 'media' | 'camera', fadeMs: number) => {
+  const obsSwitch = useCallback((kind: 'media' | 'return', fadeMs: number) => {
     window.electronAPI
       ?.obsSwitch?.(kind, fadeMs)
       .then((r) => setObsNote(r.ok || r.skipped ? '' : (r.error ?? 'OBS scene switch failed')))
@@ -156,6 +156,9 @@ function ControllerView() {
     (message: string) => new Promise<boolean>((resolve) => setConfirmRequest({ message, resolve })),
     []
   );
+
+  const m3Ref = useRef(m3);
+  m3Ref.current = m3;
 
   const applyM3 = useCallback((status?: M3Status) => {
     if (status) setM3(status);
@@ -322,24 +325,33 @@ function ControllerView() {
   }, [timer.state, runStartSequence]);
 
   /**
-   * Shared tail of END and STOP: the timer window fades to black -> it is closed -> the shortcut brings M³'s
-   * media display back (verified by the app). Returns when the shortcut was sent.
+   * Shared tail of END and STOP (timings: SEQUENCE.handBack). The way back is built to be smooth, with OBS's return to
+   * the camera as the very last step:
+   *   timer window fades to black -> black for 3 s -> shortcut brings M³'s media display back (it fades in OVER our
+   *   black window) -> our window closes underneath it -> 1 s after the shortcut OBS fades back.
+   * Returns when the shortcut was sent.
    */
-  const handBackToM3 = useCallback(
-    async (t: { fadeToBlackMs: number; closeAfterFadeMs: number; shortcutAfterCloseMs: number }) => {
-      window.electronAPI?.setM3Guard?.(false); // from now on M³ is SUPPOSED to come back
-      setCurtain({ on: true, ms: t.fadeToBlackMs });
-      await delay(t.fadeToBlackMs + t.closeAfterFadeMs);
-      await window.electronAPI?.closeStageWindow?.();
-      setStageShowsTimer(false);
-      setCurtain({ on: false, ms: 0 });
-      await delay(t.shortcutAfterCloseMs);
-      const shortcutAt = Date.now();
-      applyM3(await window.electronAPI?.selectAndSignalM3?.());
-      return shortcutAt;
-    },
-    [applyM3]
-  );
+  const handBackToM3 = useCallback(async () => {
+    const h = SEQUENCE.handBack;
+    window.electronAPI?.setM3Guard?.(false); // from now on M³ is SUPPOSED to come back
+    setCurtain({ on: true, ms: h.fadeToBlackMs });
+    await delay(h.fadeToBlackMs);
+    if (m3Ref.current.enabled !== false) await delay(h.blackHoldMs); // plain black: M³ is about to fade in over it
+
+    const shortcutAt = Date.now();
+    applyM3(await window.electronAPI?.selectAndSignalM3?.());
+
+    // Our black window stays until M³ has fully faded in on top of it, then goes away underneath.
+    await delay(Math.max(0, shortcutAt + h.closeAfterShortcutMs - Date.now()));
+    await window.electronAPI?.closeStageWindow?.();
+    setStageShowsTimer(false);
+    setCurtain({ on: false, ms: 0 });
+
+    // The very last step: OBS fades back to the Camera scene (or the scene it was on before the countdown).
+    await delay(Math.max(0, shortcutAt + h.obsAfterShortcutMs - Date.now()));
+    obsSwitch('return', SEQUENCE.obs.returnFadeMs);
+    return shortcutAt;
+  }, [applyM3, obsSwitch]);
 
   // --- END SEQUENCE, natural completion -----------------------------------
   const runCompletionSequence = useCallback(
@@ -349,19 +361,17 @@ function ControllerView() {
       let shortcutAt = 0;
       try {
         setPhase({ kind: 'ending', until: Date.now() + e.holdZeroMs });
-        // OBS (optional): Zoom fades back to the Camera scene as the timer ends, while the room still sees 00:00.
         cancelPendingObsMedia();
-        setTimeout(() => obsSwitch('camera', SEQUENCE.obs.cameraFadeMs), SEQUENCE.obs.cameraDelayAfterEndMs);
         await skippableDelay(e.holdZeroMs);
         setPhase({ kind: 'returning' });
-        shortcutAt = await handBackToM3(e);
+        shortcutAt = await handBackToM3();
       } finally {
         busyRef.current = false;
         setPhase(null);
       }
       if (closeAfter) setQuitAt(shortcutAt + e.quitAfterShortcutMs);
     },
-    [handBackToM3, skippableDelay, obsSwitch, cancelPendingObsMedia]
+    [handBackToM3, skippableDelay, cancelPendingObsMedia]
   );
 
   const prevTimerState = useRef(timer.state);
@@ -402,18 +412,17 @@ function ControllerView() {
     try {
       setPhase({ kind: 'stopping' });
       cancelPendingObsMedia();
-      obsSwitch('camera', SEQUENCE.obs.cameraFadeOnStopMs);
       if (autoClose) setPendingCloseReconfirm(true);
       timer.stop();
       setStageShowsTimer(false); // timer fades out while the curtain fades in
       setTargetTimeMode(false);
       setTargetTimeValue('');
-      await handBackToM3(SEQUENCE.stop);
+      await handBackToM3();
     } finally {
       busyRef.current = false;
       setPhase(null);
     }
-  }, [timer, autoClose, handBackToM3, obsSwitch, cancelPendingObsMedia]);
+  }, [timer, autoClose, handBackToM3, cancelPendingObsMedia]);
 
   const handleSetNewTime = useCallback(() => {
     // After a finished countdown the stage is already closed and M3 is back: just reset.
@@ -779,11 +788,12 @@ const OBS_DOT: Record<ObsStatus['state'], string> = {
 };
 
 function ObsStatusRow({ status, note }: { status: ObsStatus; note: string }) {
-  const ready = status.state === 'connected' && status.mediaScene && status.cameraScene;
+  const back = status.returnMode === 'previous' ? (status.previousScene || 'previous scene') : status.cameraScene;
+  const ready = status.state === 'connected' && status.mediaScene && (status.returnMode === 'previous' || status.cameraScene);
   const text =
     status.state === 'connected'
       ? ready
-        ? `Connected · ${status.cameraScene} ⇄ ${status.mediaScene}`
+        ? `Connected · ${back} ⇄ ${status.mediaScene}`
         : 'Connected · choose the scenes in Settings'
       : status.state === 'auth-failed'
         ? 'Wrong WebSocket password'

@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.2',
+    date: '2026-10-27',
+    items: [
+      'Smoother way back to M³. After the timer ends or you press Stop, the timer window fades to black and stays black for 3 seconds. Then M³\'s media display fades in on top of it, the timer window closes behind it, and OBS fades back one second later.',
+      'OBS going back to the camera is now the very last step (before, it started first, so Zoom could show the camera while the stage was still changing).',
+      'New OBS option: instead of the Camera scene, OBS can go back to the scene it was on before the countdown started. Choose it in Settings > OBS Scene Switching.',
+    ],
+  },
+  {
     version: '1.0.0',
     date: '2026-10-27',
     items: [
