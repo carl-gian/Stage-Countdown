@@ -7,3 +7,4 @@ release/
 # Reference material only - the Meeting Media Manager source is never uploaded
 OTHER APP SOURCE CODE/
 *.tsbuildinfo
+docs/images/*.mov
