@@ -724,6 +724,12 @@ ipcMain.handle('m3-guard', (_event, on) => {
   return true;
 });
 
+// The renderer never receives (or sets) the sealed OBS password through the generic config calls.
+const publicConfig = () => {
+  const { obsPasswordEnc, ...rest } = loadConfig();
+  return { ...rest, obs: { ...rest.obs, hasPassword: !!obsPasswordEnc } };
+};
+
 ipcMain.handle('get-config', () => publicConfig());
 
 ipcMain.handle('set-config', (_event, patch) => {

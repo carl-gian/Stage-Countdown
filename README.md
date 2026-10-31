@@ -8,6 +8,14 @@ so that the people watching on Zoom see the timer too, with smooth fades and nob
 > **Made with AI.** This program was written with the help of AI (Claude, by Anthropic), working from my own specification.
 > Please test it on your own setup before relying on it in a live meeting (see [Testing before a meeting](#testing-before-a-meeting)).
 
+<p align="center">
+  <img src="docs/images/demo-controller.gif" width="300" alt="The controller window running a countdown">
+  &nbsp;&nbsp;
+  <img src="docs/images/demo-stage-timer.gif" width="520" alt="The full-screen timer on the stage display">
+</p>
+
+<p align="center"><sub>Left: the controller window. Right: the stage display.</sub></p>
+
 ---
 
 ## Contents
@@ -99,6 +107,9 @@ shortcut**, so the key press reaches M³; if it can't be selected the shortcut i
 
 ## With OBS and Zoom
 
+<img src="docs/images/settings-obs.png" width="420" alt="OBS Scene Switching settings">
+
+
 OBS is what Zoom participants see. With **OBS Scene Switching** on, the app changes OBS scenes for you.
 
 **In OBS**
@@ -132,6 +143,9 @@ Good to know:
 ---
 
 ## The OBS dock
+
+<img src="docs/images/obs-dock.png" width="720" alt="The Stage Countdown dock inside OBS">
+
 
 When OBS scene switching is on, the app also serves a small control panel for OBS. It does exactly what the main window does: set the
 minutes and seconds (or a clock time to finish at), then Start / Pause / Resume / Restart / Stop. It also shows the countdown, the
@@ -198,6 +212,11 @@ All timings live in one file, [`src/lib/sequence.ts`](src/lib/sequence.ts), and 
 ---
 
 ## Settings reference
+
+<img src="docs/images/settings-appearance.png" width="420" alt="Appearance settings: colours, rings, text">
+
+<img src="docs/images/stage-timer.png" width="720" alt="The stage timer">
+
 
 | Section | What it does |
 |---|---|

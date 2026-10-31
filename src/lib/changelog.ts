@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.7',
+    date: '2026-10-31',
+    items: [
+      'Fix: reading and saving some settings could fail silently (a leftover code error). Settings now load and save reliably.',
+      'The README now has screenshots and demo animations.',
+    ],
+  },
+  {
     version: '1.0.6',
     date: '2026-10-28',
     items: [
