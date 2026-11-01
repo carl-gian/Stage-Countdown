@@ -9,6 +9,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.2.1',
+    date: '2026-11-01',
+    items: [
+      'Re-release of 1.2.0 with the new "Steward" look, the smoother M³ hand-back and the M³ reliability fixes. No other changes.',
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-11-01',
     items: [
