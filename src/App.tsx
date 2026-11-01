@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Controller, { type Phase } from '@/components/Controller';
+import { stateLabel } from '@/lib/stateLabel';
 import TimerDisplay from '@/components/TimerDisplay';
 import SettingsModal from '@/components/SettingsModal';
 import HelpModal from '@/components/HelpModal';
@@ -552,95 +553,87 @@ function ControllerView() {
 
   const noopNumberHandler = useCallback(() => {}, []);
 
-  const bgStyle = visual?.background?.mode === 'gradient'
-    ? { background: `linear-gradient(135deg, ${visual.background.color1}, ${visual.background.color2})` }
-    : { background: visual?.background?.color1 || 'transparent' };
-
   const counting = timer.state === 'running' || timer.state === 'paused';
   const manualControlsLocked = targetTimeMode || counting || busy;
+  const m3On = m3.enabled !== false;
+  const { label: stateText, tone: stateTone } = stateLabel(timer.state, phase);
+
+  const pills = (
+    <>
+      <span className={`st-pill ${stateTone}`}><i />{stateText}</span>
+      {m3On && <M3Pill status={m3} />}
+      {obsStatus?.enabled && <ObsPill status={obsStatus} />}
+    </>
+  );
+
+  const targetTime = (
+    <div className="sc-attime">
+      <label htmlFor="target-time">
+        Count down to a time
+        <small>Ends exactly at this clock time</small>
+      </label>
+      <input
+        id="target-time"
+        type="time"
+        className="sc-input st-num"
+        value={targetTimeValue}
+        onChange={handleTargetTimeChange}
+        disabled={counting || busy}
+      />
+      {targetTimeMode && (
+        <button className="st-btn st-btn--quiet" onClick={handleClearTargetTime} disabled={counting || busy}>
+          Clear
+        </button>
+      )}
+    </div>
+  );
+
+  const options = (
+    <>
+      {m3On && <M3Option status={m3} busy={busy} onToggle={handleToggleM3} />}
+      {obsStatus?.enabled && <ObsOption status={obsStatus} note={obsNote} />}
+      <AutoCloseOption autoClose={autoClose} quitAt={quitAt} blocked={autoCloseBlocked} onClick={handleAutoCloseButton} />
+    </>
+  );
 
   return (
-    <div className="w-screen h-screen overflow-hidden relative">
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ ...bgStyle, opacity: visual?.background?.opacity ?? 1 }}
-      />
-
-      <div className="relative z-10 w-full h-full flex flex-col">
-        <div className="flex flex-col gap-1.5 px-3 pt-3 pb-1.5 pointer-events-auto shrink-0">
-          <div className="flex items-center gap-2 bg-black/70 backdrop-blur border border-white/10 rounded-lg p-2 shadow-lg">
-            <span className="text-white text-sm font-medium whitespace-nowrap">Countdown to Time:</span>
-            <input
-              type="time"
-              value={targetTimeValue}
-              onChange={handleTargetTimeChange}
-              disabled={counting || busy}
-              className="bg-gray-800 text-white rounded px-2 py-1 outline-none text-sm disabled:opacity-50 flex-1 min-w-0"
-            />
-            {targetTimeMode && (
-              <button
-                onClick={handleClearTargetTime}
-                disabled={counting || busy}
-                title="Clear target time"
-                className="text-gray-400 hover:text-white text-sm px-1.5 disabled:opacity-30"
-              >
-                ✕
-              </button>
-            )}
-            <button
-              onClick={handleStartTargetCountdown}
-              disabled={!targetTimeMode || counting || busy}
-              className="px-3 py-1.5 rounded-md text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
-            >
-              Start
-            </button>
-          </div>
-
-          <AutoCloseButton autoClose={autoClose} quitAt={quitAt} blocked={autoCloseBlocked} onClick={handleAutoCloseButton} />
-
-          {update && (update.status === 'ready' || update.status === 'downloading') && (
-            <UpdateBadge update={update} />
-          )}
-          {m3.enabled !== false && (
-            <M3StatusRow status={m3} busy={busy} onToggle={handleToggleM3} />
-          )}
-          {obsStatus?.enabled && <ObsStatusRow status={obsStatus} note={obsNote} />}
-        </div>
-
-        <div className="flex-1 min-h-0">
-          <Controller
-            state={timer.state}
-            minutes={timer.settings.minutes}
-            seconds={timer.settings.seconds}
-            onMinutesChange={manualControlsLocked ? noopNumberHandler : (m) => timer.setSettings({ ...timer.settings, minutes: m })}
-            onSecondsChange={manualControlsLocked ? noopNumberHandler : (s) => timer.setSettings({ ...timer.settings, seconds: s })}
-            disableTimeInputs={manualControlsLocked}
-            onStart={handleStart}
-            onPause={timer.pause}
-            onResume={timer.resume}
-            onStop={handleStop}
-            onRestart={handleRestart}
-            onSetNewTime={handleSetNewTime}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenHelp={() => openHelp('start')}
-            pinned={pinned}
-            onTogglePin={togglePin}
-            visual={visual}
-            phase={phase}
-            onSkipPhase={() => skipHoldRef.current?.()}
-          >
-            <TimerDisplay
-              remainingMs={preroll ?? (timer.state === 'idle' ? timer.durationMs : timer.remainingMs)}
-              totalMs={preroll ?? timer.totalMs}
-              endsAt={preroll !== null ? 0 : timer.endsAt}
-              state={preroll !== null ? 'ready' : timer.state}
-              visual={visual}
-              windowSize={windowSize}
-              hideStatus={false}
-            />
-          </Controller>
-        </div>
-      </div>
+    <div className="sc-app relative overflow-hidden">
+      <Controller
+        state={timer.state}
+        minutes={timer.settings.minutes}
+        seconds={timer.settings.seconds}
+        onMinutesChange={manualControlsLocked ? noopNumberHandler : (m) => timer.setSettings({ ...timer.settings, minutes: m })}
+        onSecondsChange={manualControlsLocked ? noopNumberHandler : (s) => timer.setSettings({ ...timer.settings, seconds: s })}
+        disableTimeInputs={manualControlsLocked}
+        lockedNote={targetTimeMode && targetTimeValue ? `Counting down to ${targetTimeValue}` : undefined}
+        onStart={handleStart}
+        onPause={timer.pause}
+        onResume={timer.resume}
+        onStop={handleStop}
+        onRestart={handleRestart}
+        onSetNewTime={handleSetNewTime}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenHelp={() => openHelp('start')}
+        pinned={pinned}
+        onTogglePin={togglePin}
+        visual={visual}
+        phase={phase}
+        onSkipPhase={() => skipHoldRef.current?.()}
+        pills={pills}
+        banner={update && (update.status === 'ready' || update.status === 'downloading') ? <UpdateBanner update={update} /> : null}
+        targetTime={targetTime}
+        countingNote={m3On ? 'M³ is hidden and guarded until the end' : undefined}
+        options={options}
+      >
+        <TimerDisplay
+          remainingMs={preroll ?? (timer.state === 'idle' ? timer.durationMs : timer.remainingMs)}
+          totalMs={preroll ?? (timer.state === 'idle' ? timer.durationMs : timer.totalMs)}
+          endsAt={preroll !== null ? 0 : timer.endsAt}
+          state={preroll !== null ? 'ready' : timer.state}
+          visual={visual}
+          windowSize={windowSize}
+        />
+      </Controller>
 
       {confirmRequest && (
         <ConfirmDialog
@@ -671,9 +664,31 @@ function ControllerView() {
   );
 }
 
+/**
+ * Dev only (`npm run dev`): `?view=stage&demo=1` shows the stage in a browser with a made-up countdown, for screenshots.
+ * Optional: `&at=counting|last|done`, `&scene=mountains|meadow|lake`, `&look=light|dark|auto`, `&motion=calm|plain`,
+ * `&style=custom`. Never used by the app itself.
+ */
+function demoStageState(params: URLSearchParams): StageState | null {
+  if (!import.meta.env.DEV || params.get('demo') !== '1') return null;
+  const total = 5 * 60_000;
+  const at = params.get('at');
+  const visual = mergeVisual({
+    stage: {
+      ...DEFAULT_VISUAL_SETTINGS.stage,
+      ...Object.fromEntries(['scene', 'look', 'motion', 'style'].flatMap((k) => (params.get(k) ? [[k, params.get(k)]] : []))),
+    },
+  });
+  const base = { show: true, totalMs: total, visual, blackout: false, curtainMs: 0 };
+  if (at === 'counting') return { ...base, state: 'running', remainingMs: 0, endsAt: Date.now() + 222_000 };
+  if (at === 'last') return { ...base, state: 'running', remainingMs: 0, endsAt: Date.now() + 7_400 };
+  if (at === 'done') return { ...base, state: 'complete', remainingMs: 0, endsAt: 0 };
+  return { ...base, state: 'idle', remainingMs: total, endsAt: 0 };
+}
+
 // --- STAGE VIEW (TRANSPARENT WITH GPU-ACCELERATED ANIMATION) ---
 function StageView() {
-  const [stageState, setStageState] = useState<StageState>({
+  const [stageState, setStageState] = useState<StageState>(() => demoStageState(new URLSearchParams(window.location.search)) ?? {
     show: false,
     state: 'idle',
     totalMs: 0,
@@ -700,6 +715,7 @@ function StageView() {
   }, []);
 
   const isActive = stageState.show;
+  const sceneStyle = stageState.visual.stage.style === 'scene';
 
   const bgStyle = stageState.visual?.background?.mode === 'gradient'
     ? { background: `linear-gradient(135deg, ${stageState.visual.background.color1}, ${stageState.visual.background.color2})` }
@@ -708,39 +724,65 @@ function StageView() {
   // Opacity + transform only: cheap to animate on a transparent always-on-top window.
   const ease = [0.16, 1, 0.3, 1] as const;
 
+  const timer = (
+    <TimerDisplay
+      remainingMs={stageState.remainingMs}
+      totalMs={stageState.totalMs}
+      endsAt={stageState.endsAt}
+      state={stageState.state}
+      visual={stageState.visual}
+      windowSize={windowSize}
+      arrive
+    />
+  );
+
   return (
     <div className="w-screen h-screen overflow-hidden flex items-center justify-center relative">
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        style={bgStyle}
-        initial={false}
-        animate={{ opacity: isActive ? (stageState.visual?.background?.opacity ?? 1) : 0 }}
-        transition={{ duration: 0.5, ease }}
-      />
-
-      <AnimatePresence mode="wait">
-        {isActive && (
+      {sceneStyle ? (
+        // The Steward look: the scene IS the background (opaque), with the countdown on glass over it. It is only
+        // mounted while shown, so nothing animates behind the curtain or while M³ is on screen.
+        <AnimatePresence>
+          {isActive && (
+            <motion.div
+              key="stage-scene"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, ease }}
+              className="absolute inset-0"
+              style={{ willChange: 'opacity' }}
+            >
+              {timer}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      ) : (
+        <>
           <motion.div
-            key="stage-timer"
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.92 }}
+            className="absolute inset-0 pointer-events-none"
+            style={bgStyle}
+            initial={false}
+            animate={{ opacity: isActive ? (stageState.visual?.background?.opacity ?? 1) : 0 }}
             transition={{ duration: 0.5, ease }}
-            className="relative flex items-center justify-center p-8"
-            style={{ willChange: 'transform, opacity' }}
-          >
-            <TimerDisplay
-              remainingMs={stageState.remainingMs}
-              totalMs={stageState.totalMs}
-              endsAt={stageState.endsAt}
-              state={stageState.state}
-              visual={stageState.visual}
-              windowSize={windowSize}
-              hideStatus={true}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+          />
+
+          <AnimatePresence mode="wait">
+            {isActive && (
+              <motion.div
+                key="stage-timer"
+                initial={{ opacity: 0, scale: 0.92 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.92 }}
+                transition={{ duration: 0.5, ease }}
+                className="relative flex items-center justify-center p-8"
+                style={{ willChange: 'transform, opacity' }}
+              >
+                {timer}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
+      )}
 
       {/* Black curtain: covers the stage while M3 is hidden/shown so the hand-off never flashes. */}
       <motion.div
@@ -754,7 +796,8 @@ function StageView() {
   );
 }
 
-function AutoCloseButton({ autoClose, quitAt, blocked, onClick }: { autoClose: boolean; quitAt: number | null; blocked: boolean; onClick: () => void }) {
+/** "Close StageCountdown after Timer ends" as a switch row; while the app is about to quit, a Cancel button and a draining bar. */
+function AutoCloseOption({ autoClose, quitAt, blocked, onClick }: { autoClose: boolean; quitAt: number | null; blocked: boolean; onClick: () => void }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (quitAt === null) return;
@@ -762,126 +805,143 @@ function AutoCloseButton({ autoClose, quitAt, blocked, onClick }: { autoClose: b
     return () => clearInterval(id);
   }, [quitAt]);
 
-  if (blocked) {
-    return (
-      <button
-        disabled
-        title={AUTO_CLOSE_BLOCKED_HINT}
-        className="w-full py-2 rounded-lg text-sm font-semibold border bg-black/40 text-gray-500 border-white/5 cursor-not-allowed"
-      >
-        🔒 {AUTO_CLOSE_BLOCKED_TEXT}
-      </button>
-    );
-  }
-
-  if (quitAt !== null) {
+  if (quitAt !== null && !blocked) {
     const secs = Math.max(0, Math.ceil((quitAt - now) / 1000));
     return (
-      <button
-        onClick={onClick}
-        className="relative w-full overflow-hidden py-2 rounded-lg text-sm font-bold shadow-lg border bg-red-700/90 text-white border-red-500"
-        title="Click to cancel and keep StageCountdown open"
-      >
-        {/* Drains over the countdown */}
-        <span
-          className="absolute inset-y-0 left-0 bg-red-500/50"
-          style={{ width: `${Math.min(100, ((quitAt - now) / SEQUENCE.end.quitAfterShortcutMs) * 100)}%`, transition: 'width 200ms linear' }}
-        />
-        <span className="relative">Closing in {secs}s · click to cancel</span>
-      </button>
+      <div className="st-option st-option--wrap" role="status">
+        <span>
+          <b>Closing in {secs}s</b>
+          <small>Stage Countdown closes after this countdown</small>
+        </span>
+        <button className="st-btn st-btn--soft" onClick={onClick} title="Click to cancel and keep StageCountdown open">
+          Cancel
+        </button>
+        <div className="sc-drain" style={{ flexBasis: '100%' }}>
+          <i style={{ width: `${Math.min(100, ((quitAt - now) / SEQUENCE.end.quitAfterShortcutMs) * 100)}%` }} />
+        </div>
+      </div>
     );
   }
 
   return (
-    <button
-      onClick={onClick}
-      className={`w-full py-2 rounded-lg text-sm font-bold transition-all shadow-lg border ${
-        autoClose
-          ? 'bg-red-600/90 text-white border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)]'
-          : 'bg-black/70 text-gray-300 border-white/10 hover:bg-black/80'
-      }`}
-    >
-      {autoClose ? '✓ WILL CLOSE AFTER TIMER ENDS' : 'Close StageCountdown after Timer ends'}
-    </button>
+    <div className="st-option" title={blocked ? AUTO_CLOSE_BLOCKED_HINT : undefined}>
+      <span>
+        Close StageCountdown after Timer ends
+        <small>{blocked ? AUTO_CLOSE_BLOCKED_TEXT : autoClose ? 'On: the app closes 5 s after M³ is back' : 'Off'}</small>
+      </span>
+      <button
+        className="st-switch"
+        role="switch"
+        aria-checked={autoClose && !blocked}
+        aria-label="Close StageCountdown after Timer ends"
+        disabled={blocked}
+        onClick={onClick}
+      />
+    </div>
   );
 }
 
-const OBS_DOT: Record<ObsStatus['state'], string> = {
-  off: 'text-gray-500',
-  searching: 'text-amber-400',
-  connecting: 'text-amber-400',
-  connected: 'text-emerald-400',
-  'auth-failed': 'text-red-400',
-  error: 'text-red-400',
+const OBS_TONE: Record<ObsStatus['state'], string> = {
+  off: '',
+  searching: 'st-pill--warn',
+  connecting: 'st-pill--warn',
+  connected: 'st-pill--ok',
+  'auth-failed': 'st-pill--danger',
+  error: 'st-pill--danger',
 };
 
-function ObsStatusRow({ status, note }: { status: ObsStatus; note: string }) {
+function obsText(status: ObsStatus) {
   const back = status.returnMode === 'previous' ? (status.previousScene || 'previous scene') : status.cameraScene;
   const ready = status.state === 'connected' && status.mediaScene && (status.returnMode === 'previous' || status.cameraScene);
-  const text =
-    status.state === 'connected'
-      ? ready
-        ? `Connected · ${back} ⇄ ${status.mediaScene}`
-        : 'Connected · choose the scenes in Settings'
-      : status.state === 'auth-failed'
-        ? 'Wrong WebSocket password'
-        : status.state === 'error'
-          ? 'Could not talk to OBS'
-          : 'Looking for OBS…';
+  return status.state === 'connected'
+    ? ready
+      ? `Connected · ${back} ⇄ ${status.mediaScene}`
+      : 'Connected · choose the scenes in Settings'
+    : status.state === 'auth-failed'
+      ? 'Wrong WebSocket password'
+      : status.state === 'error'
+        ? 'Could not talk to OBS'
+        : 'Looking for OBS…';
+}
+
+function ObsPill({ status }: { status: ObsStatus }) {
+  const label = status.state === 'connected' ? 'OBS connected' : status.state === 'auth-failed' || status.state === 'error' ? 'OBS problem' : 'Looking for OBS';
+  return <span className={`st-pill ${OBS_TONE[status.state]}`}><i />{label}</span>;
+}
+
+function ObsOption({ status, note }: { status: ObsStatus; note: string }) {
   return (
-    <div
-      className="flex items-center gap-2 bg-black/70 backdrop-blur border border-white/10 rounded-lg px-2 py-1.5 shadow-lg text-xs text-gray-300"
-      title={note || status.error}
-    >
-      <span className={OBS_DOT[status.state]}>●</span>
-      <span className="flex-1 min-w-0 truncate">
-        OBS: {text}
-        {note && <span className="text-red-400"> · {note}</span>}
+    <div className="st-option" title={note || status.error}>
+      <span>
+        <b>OBS</b>
+        <small>
+          {obsText(status)}
+          {note && <span className="sc-error"> · {note}</span>}
+        </small>
       </span>
     </div>
   );
 }
 
-/** The blue "Update ready" badge. Click to restart and update (the app asks first). */
-function UpdateBadge({ update }: { update: UpdateInfo }) {
+/** Update notice. Click to restart and update (the app asks first). */
+function UpdateBanner({ update }: { update: UpdateInfo }) {
+  const icon = (
+    <svg className="st-banner__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 16V8M8.5 11.5 12 8l3.5 3.5" />
+    </svg>
+  );
   if (update.status === 'downloading') {
     return (
-      <div className="w-full rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-200">
-        Downloading update {update.version}… {update.percent}%
+      <div className="st-banner" role="status">
+        {icon}
+        <div className="st-banner__body">
+          <b>Downloading update {update.version}… {update.percent}%</b>
+          <p>It downloads quietly and is never installed on its own.</p>
+        </div>
       </div>
     );
   }
   return (
-    <button
-      onClick={() => window.electronAPI?.updateInstall?.()}
-      className="w-full rounded-lg border border-blue-400 bg-blue-600/90 px-3 py-2 text-sm font-bold text-white shadow-lg hover:bg-blue-500"
-      title="Install the update and restart the app (it asks first)"
-    >
-      ⬆ Update {update.version} ready — click to restart and update
-    </button>
+    <div className="st-banner" role="status">
+      {icon}
+      <div className="st-banner__body">
+        <b>Update {update.version} is ready</b>
+        <p>Restart to install it, when no meeting is running.</p>
+      </div>
+      <button className="st-btn st-btn--primary" onClick={() => window.electronAPI?.updateInstall?.()} title="Install the update and restart the app (it asks first)">
+        Restart and update
+      </button>
+    </div>
   );
 }
 
-function M3StatusRow({ status, busy, onToggle }: { status: M3Status; busy: boolean; onToggle: () => void }) {
+function M3Pill({ status }: { status: M3Status }) {
   const label = m3Label(status);
-  const cls = label.word === 'Shown' ? 'text-emerald-400' : 'text-amber-400';
+  const tone = !status.ok ? 'st-pill--danger' : label.word === 'Shown' ? 'st-pill--warn' : 'st-pill--brand';
+  return <span className={`st-pill ${tone}`}><i />{label.text}</span>;
+}
+
+function M3Option({ status, busy, onToggle }: { status: M3Status; busy: boolean; onToggle: () => void }) {
+  const label = m3Label(status);
   return (
-    <div className="flex items-center gap-2 bg-black/70 backdrop-blur border border-white/10 rounded-lg px-2 py-1.5 shadow-lg">
-      <span
-        className="text-xs text-gray-300 flex-1 min-w-0 truncate"
-        title={status.error ?? status.note ?? (label.guessed ? "Best guess: M³'s window could not be read" : undefined)}
-      >
-        {M3_BADGE_PREFIX} <b className={cls}>{label.word}</b>
-        {status.note && <span className="text-amber-300"> · {status.note}</span>}
-        {!status.ok && <span className="text-red-400"> · {status.error ?? 'could not reach M³'}</span>}
+    <div className="st-option">
+      <span title={status.error ?? status.note ?? (label.guessed ? "Best guess: M³'s window could not be read" : undefined)}>
+        <b>{M3_BADGE_PREFIX}</b>
+        <small>
+          {label.word}
+          {label.guessed && ' (assumed)'}
+          {status.note && <span className="sc-note"> · {status.note}</span>}
+          {!status.ok && <span className="sc-error"> · {status.error ?? 'could not reach M³'}</span>}
+        </small>
       </span>
       <button
+        className="st-btn st-btn--quiet"
         onClick={onToggle}
         disabled={busy}
         title="Send M³'s Media Window shortcut now (shows it if hidden, hides it if showing)"
-        className="px-2 py-1 rounded text-xs font-semibold bg-white/10 text-white hover:bg-white/20 disabled:opacity-30"
       >
-        Toggle
+        {label.word === 'Shown' ? 'Hide' : 'Show'}
       </button>
     </div>
   );
@@ -889,20 +949,17 @@ function M3StatusRow({ status, busy, onToggle }: { status: M3Status; busy: boole
 
 function ConfirmDialog({ message, onAnswer }: { message: string; onAnswer: (value: boolean) => void }) {
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12121a] p-5 shadow-2xl">
-        <p className="whitespace-pre-line text-sm text-gray-200">{message}</p>
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            onClick={() => onAnswer(false)}
-            className="px-3 py-1.5 rounded-md text-sm font-semibold bg-white/10 text-gray-200 hover:bg-white/20"
-          >
+    <div className="sc-dialog" role="alertdialog" aria-modal="true" aria-label="Please confirm">
+      <div className="sc-dialog__veil" />
+      <div className="sc-dialog__panel" style={{ maxWidth: 400 }}>
+        <div className="sc-dialog__body">
+          <p className="whitespace-pre-line" style={{ margin: 0, fontSize: 15 }}>{message}</p>
+        </div>
+        <div className="sc-dialog__foot">
+          <button className="st-btn st-btn--secondary" onClick={() => onAnswer(false)}>
             No, turn it off
           </button>
-          <button
-            onClick={() => onAnswer(true)}
-            className="px-3 py-1.5 rounded-md text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-500"
-          >
+          <button className="st-btn st-btn--primary" onClick={() => onAnswer(true)}>
             Keep it on
           </button>
         </div>
