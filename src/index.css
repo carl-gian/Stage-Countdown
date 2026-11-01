@@ -1,3 +1,7 @@
+@import './styles/steward.css';
+@import './styles/app.css';
+@import './styles/stage.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -21,15 +25,24 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: 'Inter', 'Segoe UI', sans-serif;
 }
 
 body {
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The stage window: unchanged from before the redesign (its scene or the custom background paints on top) */
+html.is-stage body {
   background: #0a0a0f;
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -37,15 +50,15 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-dim) 35%, transparent);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--text-dim) 55%, transparent);
 }
 
-/* Two quick beats when a countdown completes (the end sequence waits 1.4s for this). */
+/* "Own colours" style only: two quick beats when a countdown completes (the scene style plays two ripples instead). */
 @keyframes stage-heartbeat {
   0%, 100% { transform: scale(1); }
   20% { transform: scale(1.06); }

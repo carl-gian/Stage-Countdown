@@ -1,11 +1,17 @@
 import { createContext } from 'react';
 
 /**
- * The ring size (px) the controller has room for. The controller measures the space left between its header,
- * the time inputs and the buttons and provides it here, so the ring always fits instead of being sized from the
- * whole window and squashing the rows around it. The stage display has no provider and sizes from its window.
+ * The free space (px) a preview has: the controller and Settings measure their preview area and provide it here, so
+ * the preview always fits instead of being sized from the whole window. The stage window has no provider and fills
+ * its (full-screen) window.
  */
-export const FitSizeContext = createContext<number | null>(null);
+export const FitBoxContext = createContext<{ width: number; height: number } | null>(null);
+
+/** The largest 16:9 box (the stage screen's shape) that fits the free space. */
+export function fitStageBox(width: number, height: number): { width: number; height: number } {
+  const w = Math.max(0, Math.floor(Math.min(width, (height * 16) / 9)));
+  return { width: w, height: Math.round((w * 9) / 16) };
+}
 
 /** Largest ring that fits a box, leaving `margin` px all around for the glow. */
 export function fitRing(width: number, height: number, margin = 40, min = 110, max = 520): number {

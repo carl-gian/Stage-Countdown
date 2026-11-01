@@ -1,0 +1,143 @@
+/* The stage screen in the Steward look: a nature scene, light (day) or dark (night), with the countdown on frosted
+   glass. Ported from the approved mockup (docs/mockups/redesign.html). Used full screen on the stage window and small
+   in the controller and Settings previews.
+
+   Sizes use --u, one unit of the 1600 x 900 scene drawing. Both SVGs use "slice" (cover), so on any screen shape the
+   disc, digits and line above them stay locked to the ring drawn in the SVG. */
+
+.cd-stage {
+  --speed: 1;
+  --u: max(calc(100cqw / 1600), calc(100cqh / 900));
+  --digit-scale: 1;
+  position: relative; overflow: hidden; container-type: size; isolation: isolate;
+  background: linear-gradient(180deg, var(--sky1) 0%, var(--sky2) 72%);
+  font-family: var(--font);
+}
+
+/* Light = day. Ink and disc are shared by every scene */
+.cd-stage[data-mode="light"] { --ink:#1f2a44; --kick:#3d4860; --track:rgba(31,42,68,.12); --warn:#c98400;
+  --glass-a:rgba(255,255,255,.62); --glass-b:rgba(255,255,255,.26); --rim-a:rgba(255,255,255,1); --rim-b:rgba(255,255,255,.75);
+  --shine:rgba(255,255,255,.75); --glow-in:rgba(255,255,255,.35); --drop:rgba(31,42,68,.30); --wash:rgba(255,255,255,.24); }
+.cd-stage[data-mode="dark"]  { --ink:#ffffff; --kick:#c3cbdc; --track:rgba(255,255,255,.14); --warn:#f2b544;
+  --glass-a:rgba(70,84,128,.48); --glass-b:rgba(14,20,40,.42); --rim-a:rgba(255,255,255,.55); --rim-b:rgba(255,255,255,.22);
+  --shine:rgba(255,255,255,.22); --glow-in:rgba(143,169,214,.14); --drop:rgba(0,0,0,.5); --wash:rgba(10,16,34,.22); }
+
+/* Mountain morning */
+.cd-stage[data-scene="mountains"][data-mode="light"] { --sky1:#a9dbe8; --sky2:#fdf1d6; --sun:#f4b942; --cloud:#ffffff; --far:#a8d0cf; --mid:#69a8a4; --snow:#ffffff; --near:#3f8a77; --tree:#2a6455; --trunk:#4b3b2e; --ground:#357562; --mist:#ffffff; --bird:#2d4f5c; --arc:#2f7f86; }
+.cd-stage[data-scene="mountains"][data-mode="dark"]  { --sky1:#0b1430; --sky2:#2c3f68; --sun:#f3ead2; --cloud:#3a4b72; --far:#2a3d66; --mid:#1e2e50; --snow:#9fb0d0; --near:#152443; --tree:#0c1730; --trunk:#0c1730; --ground:#0f1b35; --mist:#8fa9d6; --bird:#8fa9d6; --arc:#7cc8cf; }
+/* Meadow and trees */
+.cd-stage[data-scene="meadow"][data-mode="light"] { --sky1:#b5dcf5; --sky2:#f4fae6; --sun:#f6c445; --cloud:#ffffff; --far:#c3e09a; --mid:#93c96d; --near:#5fa85b; --tree:#2f7b47; --trunk:#6b4a32; --bird:#2f5a3e; --arc:#2f8a5b; --float:#ffffff; }
+.cd-stage[data-scene="meadow"][data-mode="dark"]  { --sky1:#0c1833; --sky2:#203a5c; --sun:#f3ead2; --cloud:#31456b; --far:#1f3e46; --mid:#17323a; --near:#11292d; --tree:#0b1f24; --trunk:#0b1f24; --bird:#8fa9d6; --arc:#7fd39a; --float:#f6d76b; }
+/* Lake at sunset */
+.cd-stage[data-scene="lake"][data-mode="light"] { --sky1:#f7c6a3; --sky2:#fdf0dc; --sun:#f49a4e; --cloud:#fff6ea; --far:#b293a8; --water:#9fcfd2; --water2:#7db5bd; --shine:#ffffff; --near:#3f6c63; --tree:#2a514b; --trunk:#2a514b; --bird:#5a3b4a; --arc:#4a6da7; }
+.cd-stage[data-scene="lake"][data-mode="dark"]  { --sky1:#14143a; --sky2:#3e2f60; --sun:#f3ead2; --cloud:#3d3768; --far:#39345f; --water:#1c2550; --water2:#252f60; --shine:#c9d4ea; --near:#0f1531; --tree:#0a0f27; --trunk:#0a0f27; --bird:#b3c6e6; --arc:#9fb6e0; }
+
+.cd-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.cd-stage[data-mode="light"] .night, .cd-stage[data-mode="dark"] .day { display: none; }
+
+/* Fills come from the scene's palette */
+.cd-stage .f-sun { fill: var(--sun); } .cd-stage .s-sun { stroke: var(--sun); } .cd-stage .f-cloud { fill: var(--cloud); }
+.cd-stage .f-far { fill: var(--far); } .cd-stage .f-mid { fill: var(--mid); } .cd-stage .f-snow { fill: var(--snow); }
+.cd-stage .f-near { fill: var(--near); } .cd-stage .f-tree { fill: var(--tree); } .cd-stage .f-trunk { fill: var(--trunk); }
+.cd-stage .f-ground { fill: var(--ground); } .cd-stage .f-mist { fill: var(--mist); } .cd-stage .s-bird { stroke: var(--bird); }
+.cd-stage .f-water { fill: var(--water); } .cd-stage .f-water2 { fill: var(--water2); } .cd-stage .s-shine { stroke: var(--shine); }
+.cd-stage .f-float { fill: var(--float); } .cd-stage .f-star { fill: #fff; } .cd-stage .s-stem { stroke: var(--near); }
+
+/* Scene motion. Each moving piece sets --d (and --delay). Calm = slow and small; Plain = the scene stands still */
+.cd-stage .cd-scene [style*="--d"] { animation-duration: calc(var(--d) * var(--speed)); animation-delay: calc(var(--delay, 0s) * var(--speed)); animation-iteration-count: infinite; }
+.cd-stage[data-motion="calm"] { --speed: 1.6; }
+.cd-stage[data-motion="plain"] .cd-scene * { animation: none !important; }
+.cd-stage .drift   { animation-name: cd-drift; animation-timing-function: linear; }
+.cd-stage .fly     { animation-name: cd-fly; animation-timing-function: linear; }
+.cd-stage .flap    { transform-box: fill-box; transform-origin: 50% 100%; animation: cd-flap .5s ease-in-out infinite alternate; }
+.cd-stage .sway    { transform-box: fill-box; transform-origin: 50% 100%; animation-name: cd-sway; animation-timing-function: ease-in-out; animation-direction: alternate; }
+.cd-stage .bob     { transform-box: fill-box; transform-origin: 50% 100%; animation-name: cd-bob; animation-timing-function: ease-in-out; animation-direction: alternate; }
+.cd-stage .glow    { transform-box: fill-box; transform-origin: center; animation-name: cd-glow; animation-timing-function: ease-in-out; animation-direction: alternate; }
+.cd-stage .spin    { transform-box: fill-box; transform-origin: center; animation-name: cd-spin; animation-timing-function: linear; }
+.cd-stage .shimmer { animation-name: cd-shimmer; animation-timing-function: ease-in-out; animation-direction: alternate; }
+.cd-stage .mist    { animation-name: cd-mist; animation-timing-function: ease-in-out; animation-direction: alternate; }
+.cd-stage .twinkle { animation-name: cd-twinkle; animation-timing-function: ease-in-out; animation-direction: alternate; }
+.cd-stage .float   { animation-name: cd-float; animation-timing-function: ease-in-out; }
+.cd-stage .parallax { animation-name: cd-parallax; animation-timing-function: ease-in-out; animation-direction: alternate; }
+@keyframes cd-drift { from { transform: translateX(-420px); } to { transform: translateX(2020px); } }
+@keyframes cd-fly { 0% { transform: translate(-160px, 0); } 50% { transform: translate(800px, -36px); } 100% { transform: translate(1780px, 12px); } }
+@keyframes cd-flap { to { transform: scaleY(.45); } }
+@keyframes cd-sway { from { transform: rotate(-1.4deg); } to { transform: rotate(1.4deg); } }
+@keyframes cd-bob { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+@keyframes cd-glow { from { transform: scale(1); opacity: .8; } to { transform: scale(1.06); opacity: 1; } }
+@keyframes cd-spin { to { transform: rotate(360deg); } }
+@keyframes cd-shimmer { from { transform: translateX(-18px); opacity: .2; } to { transform: translateX(18px); opacity: .7; } }
+@keyframes cd-mist { from { transform: translateX(-60px); } to { transform: translateX(60px); } }
+@keyframes cd-twinkle { from { opacity: .25; } to { opacity: .9; } }
+@keyframes cd-float { 0% { transform: translate(0, 0); opacity: 0; } 25% { opacity: .8; } 75% { opacity: .7; } 100% { transform: translate(30px, -70px); opacity: 0; } }
+@keyframes cd-parallax { from { transform: translateX(-8px); } to { transform: translateX(8px); } }
+
+/* A soft veil over the scene, so the art stays quiet behind the glass */
+.cd-wash { position: absolute; inset: 0; background: var(--wash); pointer-events: none; }
+
+/* The countdown sits on frosted glass: heavy blur, a bright rim, light catching the top edge and a soft shadow.
+   The blur is scaled with the screen (61 units = the mockup's 44 px at its size) but capped, as it is the heaviest part */
+.cd-disc { position: absolute; left: 50%; top: 50%; width: calc(664 * var(--u)); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; overflow: hidden;
+  --blur: clamp(16px, calc(61 * var(--u)), 72px);
+  background: linear-gradient(150deg, var(--glass-a) 0%, var(--glass-b) 100%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(185%) brightness(1.04); backdrop-filter: blur(var(--blur)) saturate(185%) brightness(1.04);
+  box-shadow:
+    inset 0 calc(4 * var(--u)) calc(2.4 * var(--u)) calc(-.8 * var(--u)) var(--shine),
+    inset 0 calc(-19.2 * var(--u)) calc(38.4 * var(--u)) calc(-12.8 * var(--u)) var(--glow-in),
+    0 calc(9.6 * var(--u)) calc(19.2 * var(--u)) calc(-8 * var(--u)) var(--drop),
+    0 calc(38.4 * var(--u)) calc(80 * var(--u)) calc(-28.8 * var(--u)) var(--drop); }
+/* the rim: brighter at the top left and bottom right, like light bending through thick glass */
+.cd-disc::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: calc(2.56 * var(--u));
+  background: linear-gradient(150deg, var(--rim-a) 0%, rgba(255,255,255,.08) 38%, rgba(255,255,255,.04) 62%, var(--rim-b) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+/* the sheen: a soft curved highlight across the upper half */
+.cd-disc::before { content: ""; position: absolute; left: 8%; right: 8%; top: 3%; height: 46%; border-radius: 50% 50% 46% 46% / 62% 62% 38% 38%;
+  background: linear-gradient(180deg, var(--shine) 0%, transparent 100%); opacity: .42; }
+
+.cd-ring-wrap { transform-origin: 800px 450px; transform-box: view-box; }
+.cd-track { stroke: var(--track); }
+.cd-arc { stroke: var(--arc); transition: stroke .6s ease; }
+.cd-head { fill: var(--arc); transition: fill .6s ease; }
+.cd-tick { stroke: var(--ink); transition: opacity .5s ease; }
+.cd-stage.last .cd-arc, .cd-stage.done .cd-arc { stroke: var(--warn); }
+.cd-stage.last .cd-head, .cd-stage.done .cd-head { fill: var(--warn); }
+.cd-ripple { fill: none; stroke: var(--warn); stroke-width: 4; opacity: 0; transform-origin: 800px 450px; transform-box: view-box; }
+.cd-stage.done .cd-ripple { animation: cd-ripple 1.6s var(--ease-out) 2; }
+.cd-stage.done .cd-ripple.r2 { animation-delay: .5s; }
+@keyframes cd-ripple { from { opacity: .8; transform: scale(1); } to { opacity: 0; transform: scale(1.4); } }
+
+.cd-readout { position: absolute; inset: 0; display: grid; place-items: center; z-index: 2; pointer-events: none; color: var(--ink); }
+.cd-kicker { position: absolute; left: 0; right: 0; top: calc(50% - 134.4 * var(--u) * var(--digit-scale)); margin: 0; text-align: center;
+  font-size: calc(28 * var(--u)); font-weight: 700; color: var(--kick); letter-spacing: .02em; transition: opacity .5s ease; }
+.cd-stage.done .cd-kicker { opacity: 0; }
+.cd-digits { display: flex; justify-content: center; font-size: calc(144 * var(--u) * var(--digit-scale)); font-weight: 800; line-height: 1;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+/* Each digit lives in its own clipped window, one digit tall. When it changes, the old digit rolls down and out while
+   the new one rolls down in from above, a full window apart, so the two never overlap */
+.cd-slot { position: relative; display: inline-block; width: .6em; height: 1.1em; line-height: 1.1em; text-align: center; overflow: hidden; }
+.cd-slot.colon { width: .32em; top: -.06em; overflow: visible; }
+.cd-stage.counting .cd-slot.colon { animation: cd-colon 1s ease-in-out infinite; }
+@keyframes cd-colon { 50% { opacity: .55; } }
+.cd-d { display: block; height: 1.1em; }
+.cd-d.in { animation: cd-d-in .5s cubic-bezier(.45, 0, .2, 1) both; }
+.cd-d.out { position: absolute; left: 0; right: 0; top: 0; animation: cd-d-out .5s cubic-bezier(.45, 0, .2, 1) forwards; }
+@keyframes cd-d-out { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
+@keyframes cd-d-in { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* Grain from tokens.css, kept very light */
+.cd-grain { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light; opacity: .4; z-index: 3;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+/* Arrival (start sequence reveal): the scene rises into place while the disc and numbers fade in */
+.cd-stage.arriving .cd-scene { animation: cd-arrive 1s var(--ease-out) both; }
+.cd-stage.arriving .cd-disc, .cd-stage.arriving .cd-readout { animation: cd-fade-in 1s ease both; }
+@keyframes cd-arrive { from { opacity: 0; transform: translateY(14px) scale(1.02); } }
+@keyframes cd-fade-in { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cd-stage .cd-scene * { animation: none !important; }
+  .cd-d.out { display: none; } .cd-d.in { animation: none; }
+  .cd-stage.done .cd-ripple, .cd-stage.counting .cd-slot.colon { animation: none; }
+  .cd-stage.arriving .cd-scene { animation: cd-fade-in .2s ease both; }
+}
