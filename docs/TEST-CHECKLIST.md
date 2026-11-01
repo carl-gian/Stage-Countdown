@@ -25,6 +25,7 @@ Automated tests cannot cover the M³ hand-off, so run this on the real PC after 
 - [ ] Settings > Stage look: Scene, Look (Light / Dark / Auto: switch Windows dark mode), Motion, the line above the numbers and Number size change the preview and the stage live.
 - [ ] Motion Calm vs Plain: Plain stands still. Windows Settings > Accessibility > Visual effects > Animation effects off: the stage behaves as Plain.
 - [ ] **CPU/GPU on the hall PC** (Task Manager > Performance, GPU and CPU, during a 5 min countdown on the stage display): note Calm and Plain. If the picture stutters or the GPU sits near 100 %, use Plain and tell Caio.
+- [ ] Controller preview fills the free space (scene, and with Advanced › Use my own colours) and follows window resizes.
 - [ ] Controller follows Windows light/dark; at the smallest window size (380 × 600) everything is reachable (scroll).
 - [ ] OBS dock (dark): pills, time left, Start / Pause / Stop work as before.
 

@@ -55,7 +55,9 @@ function App() {
 function ControllerView() {
   const timer = useCountdownTimer();
   const [visual, setVisual] = useState<VisualSettings>(() => safeLoadVisualSettings());
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Dev only (`npm run dev`): ?open=settings or ?open=help opens that dialog straight away, for screenshots.
+  const devOpen = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('open') : null;
+  const [settingsOpen, setSettingsOpen] = useState(devOpen === 'settings');
   const [pinned, setPinned] = useState(true);
   const [windowSize, setWindowSize] = useState({ width: 520, height: 720 });
 
@@ -121,8 +123,8 @@ function ControllerView() {
   }, []);
 
   // Help guide, What's new, auto-update badge.
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [helpTopic, setHelpTopic] = useState('start');
+  const [helpOpen, setHelpOpen] = useState(devOpen === 'help');
+  const [helpTopic, setHelpTopic] = useState(devOpen === 'help' ? 'appearance' : 'start');
   const [whatsNew, setWhatsNew] = useState<{ open: boolean; from?: string }>({ open: false });
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
