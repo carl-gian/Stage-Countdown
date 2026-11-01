@@ -6,72 +6,78 @@ const DOCK_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stage Countdown</title>
 <style>
-  :root{color-scheme:dark;--bg:#12121a;--card:#1b1b27;--line:#2c2c3d;--text:#e8e8f0;--dim:#8d8da3;--ok:#00d4aa;--warn:#f59e0b;--bad:#ef4444;--accent:#3b82f6}
+  /* Steward dark (kingdom-project-design tokens), as in the approved mockup. The dock sits inside OBS, so it is always dark. */
+  :root{color-scheme:dark;--brand:#8fa9d6;--brand-strong:#b3c6e6;--brand-soft:#22304d;--on-brand:#121a2b;--page:#121a2b;--surface:#1a2338;--line:#2a3550;
+    --text:#e8edf6;--dim:#9aa6be;--ok:#5fc08a;--warn:#f2b544;--danger:#ff6b5e;--on-danger:#121a2b;--r-md:14px;--pill:999px}
   *{box-sizing:border-box}
-  body{margin:0;padding:10px;background:var(--bg);color:var(--text);font:13px/1.35 "Segoe UI",system-ui,sans-serif}
-  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-  .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:#262636;color:var(--dim)}
-  .badge i{width:8px;height:8px;border-radius:50%;background:currentColor}
-  .badge.ok{background:rgba(0,212,170,.14);color:var(--ok)}
-  .badge.warn{background:rgba(245,158,11,.15);color:var(--warn)}
-  .badge.bad{background:rgba(239,68,68,.15);color:var(--bad)}
-  .badge.accent{background:rgba(59,130,246,.2);color:#9cc0ff}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
-  .cap{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim)}
-  .clock{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
-  .clock b{font:600 13px ui-monospace,Consolas,monospace}
-  .time{font:700 44px/1.1 ui-monospace,Consolas,monospace;text-align:center;font-variant-numeric:tabular-nums;margin:2px 0}
-  .time.run{color:var(--ok)}.time.paused{color:var(--warn)}.time.done{color:#7aa7ff}
-  .phase{text-align:center;color:var(--warn);font-size:12px;min-height:1.3em}
-  .row{display:flex;gap:6px;align-items:center}
+  body{margin:0;padding:12px;background:var(--page);color:var(--text);font:14px/1.4 "Noto Sans","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .badge{--tone:var(--dim);display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--pill);font-size:12px;font-weight:700;
+    background:color-mix(in srgb,var(--tone) 14%,var(--page));color:var(--tone);white-space:nowrap}
+  .badge i{width:7px;height:7px;border-radius:50%;background:var(--tone)}
+  .badge.ok{--tone:var(--ok)}.badge.warn{--tone:var(--warn)}.badge.bad{--tone:var(--danger)}.badge.accent{--tone:var(--brand)}
+  .card{background:var(--surface);border-radius:var(--r-md);padding:12px 16px;margin-bottom:12px}
+  .cap{font-size:12px;font-weight:700;color:var(--dim)}
+  .clock{display:flex;justify-content:space-between;align-items:baseline}
+  .clock b{font-size:12px;font-weight:700;color:var(--dim);font-variant-numeric:tabular-nums}
+  .time{font-size:56px;font-weight:800;line-height:1.05;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin:4px 0 2px}
+  .time.paused{color:var(--warn)}.time.done{color:var(--brand)}
+  .phase{text-align:center;color:var(--brand-strong);font-size:12px;font-weight:700;min-height:1.4em}
+  .row{display:flex;gap:8px;align-items:center}
   .row>*{flex:1}
-  .set{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:6px}
-  .set label{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
-  input[type=number],input[type=time]{width:72px;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:600 16px ui-monospace,Consolas,monospace;text-align:center}
-  input[type=time]{width:auto;flex:1;font-size:14px}
+  .set{display:flex;gap:8px;align-items:flex-end;justify-content:center;margin-top:8px}
+  .set label{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--dim);font-size:12px;font-weight:700}
+  input[type=number],input[type=time]{width:72px;min-height:40px;padding:0 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--page);color:var(--text);
+    font:800 20px "Noto Sans","Segoe UI",system-ui,sans-serif;text-align:center;font-variant-numeric:tabular-nums}
+  input[type=time]{width:auto;flex:1;font-size:15px;font-weight:500}
+  input:focus-visible,button:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
   input:disabled{opacity:.45}
-  button{padding:8px 6px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--text);font:600 13px inherit;cursor:pointer}
-  button:hover{filter:brightness(1.2)}button:disabled{opacity:.4;cursor:default;filter:none}
-  button.go{background:var(--ok);border-color:var(--ok);color:#06231d}
-  button.stop{background:var(--bad);border-color:var(--bad);color:#fff}
-  .sep{color:var(--dim);font-size:20px;margin-top:14px}
-  #msg{color:var(--dim);text-align:center;font-size:12px;min-height:1.3em}
+  button{min-height:44px;padding:0 12px;border:1.5px solid var(--line);border-radius:var(--pill);background:var(--page);color:var(--text);
+    font:700 14px "Noto Sans","Segoe UI",system-ui,sans-serif;cursor:pointer;transition:transform .12s ease-out,background-color .15s ease-out}
+  button:active{transform:scale(.97)}
+  button:hover{border-color:var(--brand)}button:disabled{opacity:.45;cursor:default;transform:none}
+  button.go{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+  button.stop{background:var(--danger);border-color:var(--danger);color:var(--on-danger)}
+  button.quiet{border-color:transparent;background:transparent;color:var(--brand)}
+  .sep{color:var(--dim);font-size:22px;font-weight:800;padding-bottom:6px}
+  #msg{color:var(--dim);text-align:center;font-size:12px;min-height:1.4em}
   [hidden]{display:none!important}
+  @media (prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
 </style></head><body>
   <div class="badges">
-    <span class="badge" id="tB"><i></i><span id="t">Idle</span></span>
+    <span class="badge" id="tB"><i></i><span id="t">Ready</span></span>
     <span class="badge" id="mB" hidden><i></i><span id="m"></span></span>
     <span class="badge" id="oB"><i></i><span id="o">OBS</span></span>
     <span class="badge accent" id="uB" hidden><i></i><span id="u"></span></span>
   </div>
 
   <div class="card">
-    <div class="clock"><span class="cap">Clock</span><b id="now">--:--:--</b></div>
+    <div class="clock"><span class="cap">Time left</span><b id="now">--:--:--</b></div>
     <div class="time" id="big">00:00</div>
     <div class="phase" id="phase"></div>
   </div>
 
   <div class="card" id="setCard">
-    <div class="cap">Set time</div>
+    <div class="cap">Set the time</div>
     <div class="set">
       <label>Minutes<input type="number" id="min" min="0" max="99" value="5"></label>
       <span class="sep">:</span>
       <label>Seconds<input type="number" id="sec" min="0" max="59" value="0"></label>
     </div>
-    <div class="row" style="margin-top:10px">
-      <input type="time" id="at" title="Count down to this clock time">
-      <button id="startAt" title="Count down so that it ends exactly at this clock time">Start at time</button>
+    <div class="row" style="margin-top:12px">
+      <input type="time" id="at" title="Count down to this clock time" aria-label="Count down to a time">
+      <button id="startAt" title="Count down so that it ends exactly at this clock time">Count down to it</button>
     </div>
   </div>
 
-  <div class="row" id="btns" style="margin-bottom:6px">
+  <div class="row" id="btns" style="margin-bottom:8px">
     <button class="go" id="start">Start</button>
     <button id="pause" hidden>Pause</button>
     <button id="resume" class="go" hidden>Resume</button>
     <button id="restart" hidden>Restart</button>
     <button class="stop" id="stop" hidden>Stop</button>
   </div>
-  <div class="row" style="margin-bottom:6px"><button id="skip" hidden>Back to M³ now</button><button id="open">Open app</button></div>
+  <div class="row" style="margin-bottom:6px"><button id="skip" hidden>Back to M³ now</button><button id="open" class="quiet">Open the app</button></div>
   <div id="msg"></div>
 <script>
   const $ = (id) => document.getElementById(id)
@@ -110,9 +116,9 @@ const DOCK_HTML = `<!doctype html>
 
   function render() {
     const st = S.timerState
-    badge('t', st === 'running' ? 'ok' : st === 'paused' ? 'warn' : st === 'complete' ? 'accent' : '', S.phase ? 'Working…' : st === 'running' ? 'Running' : st === 'paused' ? 'Paused' : st === 'complete' ? 'Complete' : 'Idle')
+    badge('t', st === 'running' ? 'ok' : st === 'paused' ? 'warn' : st === 'complete' ? 'accent' : '', S.phase ? 'Working…' : st === 'running' ? 'Counting down' : st === 'paused' ? 'Paused' : st === 'complete' ? 'Finished' : 'Ready')
     $('mB').hidden = !(S.m3 && S.m3.enabled)
-    if (S.m3 && S.m3.enabled) badge('m', !S.m3.ok ? 'bad' : S.m3.media === 'shown' ? 'ok' : 'warn',
+    if (S.m3 && S.m3.enabled) badge('m', !S.m3.ok ? 'bad' : S.m3.media === 'shown' ? 'warn' : 'accent',
       !S.m3.ok ? 'M³ problem' : S.m3.media === 'shown' ? 'M³ Media Display Shown' : 'M³ Media Display Hidden')
     const o = S.obs || {}
     badge('o', o.state === 'connected' ? 'ok' : o.state === 'auth-failed' || o.state === 'error' ? 'bad' : 'warn',

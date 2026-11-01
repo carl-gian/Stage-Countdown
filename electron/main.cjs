@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, safeStorage, Tray, Menu, nativeImage, Notification, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, safeStorage, Tray, Menu, nativeImage, Notification, dialog, shell, nativeTheme } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -527,7 +527,8 @@ function createWindow(startHidden = false) {
     frame: true,
     show: false,
     title: 'StageCountdown - Controller',
-    backgroundColor: '#0a0a0f',
+    // The controller follows Windows light/dark (Steward page colours), so it doesn't flash the wrong colour on open.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#121a2b' : '#ffffff',
     icon: iconPath(),
     autoHideMenuBar: true,
     webPreferences: webPreferences(),

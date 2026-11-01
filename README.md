@@ -63,10 +63,10 @@ There is also a **portable** `.exe` (no install). It works the same but **cannot
 
 ## Quick start (no other software needed)
 
-1. Open **Settings** (gear icon) → **Display** and choose the screen the countdown should appear on.
+1. Open **Settings** (sliders icon, top right) → **Display** and choose the screen the countdown should appear on.
    *Automatic* picks a screen other than the one the controller is on.
-2. Set the minutes and seconds, or use **Countdown to Time** to finish at a clock time.
-3. Press **Start**. The stage screen goes black, the timer fades in showing the full time, and a few seconds later it starts counting.
+2. Set the minutes and seconds, or use **Count down to a time** to finish at a clock time.
+3. Press **Start**. The stage screen goes black, the scene and countdown fade in showing the full time, and a few seconds later it starts counting.
 4. **Pause / Resume / Stop** whenever you like. When the time is up, `00:00` stays for 10 seconds, then the screen fades out.
 
 To use it as a plain countdown, open **Settings → Meeting Media Manager (M³)** and switch **"Control M³'s media window"** off.
@@ -100,7 +100,7 @@ shortcut**, so the key press reaches M³; if it can't be selected the shortcut i
 - **Guard while a countdown runs:** if M³'s media display ever comes back on top of the timer, the app hides it again
   ("M³ was showing on top of the timer — hid it again"). If nothing can hide it, the guard stops after a few tries with a clear message instead
   of hammering the keyboard. To really show M³ mid-countdown, press **Stop** first.
-- **Toggle** sends the shortcut right now (shows it if hidden, hides it if showing).
+- **Hide / Show** (in the M³ row) sends the shortcut right now (shows it if hidden, hides it if showing).
 - If M³ can't be reached the countdown still runs. Closing the app while it has M³ hidden brings M³ back first.
 
 ---
@@ -220,12 +220,11 @@ All timings live in one file, [`src/lib/sequence.ts`](src/lib/sequence.ts), and 
 
 | Section | What it does |
 |---|---|
-| **Live preview** | The real stage display, so colours/size look exactly like the stage |
+| **Stage look** | A live preview, then the scene (Mountains, Meadow, Lake), Light / Dark / Auto, Motion (Calm or Plain), the line above the numbers and the number size. **Advanced → Use my own colours** brings back the plain ring with your own colours |
 | **Display** | Which screen the countdown uses (*Automatic*, or pick one) |
 | **Meeting Media Manager (M³)** | On/off switch for the M³ hand-off and the shortcut to send |
 | **OBS Scene Switching** | Enable, WebSocket port and password, Media Display and Camera scenes, where OBS goes back to (Camera scene or the previous scene), the dock address and instructions |
 | **Startup & Schedule** | Start with Windows, start hidden in the tray, scheduled countdowns |
-| **Background / Track ring / Progress ring / Digital text** | Colours, gradient, thickness, glow, font, size, shadow |
 | **Clock format** | 12 h / 24 h for the controller clock |
 | **About & updates** | Version, check for updates, What's new, Help, open logs folder |
 

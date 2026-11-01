@@ -31,12 +31,12 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         heading: 'Run a countdown',
         steps: [
-          'Open Settings (the gear) and, under Display, choose the screen the countdown should appear on. "Automatic" picks a screen other than this controller\'s.',
-          'Set the minutes and seconds in the controller, or use "Countdown to Time" to finish exactly at a clock time (for example 18:30).',
-          'Press Start. The stage screen goes black, the timer fades in showing the full time, and a couple of seconds later it starts counting.',
+          'Open Settings (the sliders button, top right) and, under Display, choose the screen the countdown should appear on. "Automatic" picks a screen other than this controller\'s.',
+          'Set the minutes and seconds in the controller, or use "Count down to a time" to finish exactly at a clock time (for example 18:30).',
+          'Press Start. The stage screen goes black, the scene and the countdown fade in showing the full time, and a couple of seconds later it starts counting.',
           'Use Pause / Resume / Stop whenever you need to. When the time is up, 00:00 stays on screen for 10 seconds, then the screen fades to black and closes.',
         ],
-        tip: 'Colours, ring, glow, font size and the clock format are all in Settings and change live, so you can see them on the preview first.',
+        tip: 'The scene, light or dark look, motion and number size are in Settings > Stage look and change live, so you can see them on the preview first.',
       },
       {
         heading: 'Good to know',
@@ -48,6 +48,39 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: 'appearance',
+    title: 'Appearance',
+    summary: 'Choose the scene, light or dark, and how much moves.',
+    sections: [
+      {
+        paragraphs: [
+          'The countdown sits on a frosted-glass disc over a gently moving nature scene. Everything is in Settings > Stage look, and the preview at the top shows each change straight away.',
+        ],
+      },
+      {
+        heading: 'The choices',
+        steps: [
+          'Scene: Mountains, Meadow or Lake. All three are original drawings made for this app.',
+          'Look: Light (day) or Dark (night). Auto follows Windows\' own light or dark setting. Light is the default; choose Dark if a bright screen is too strong in the hall or on Zoom.',
+          'Motion: Calm lets clouds, birds and trees move slowly. Plain keeps the scene still. When Windows is set to show fewer animations, the stage always behaves as Plain.',
+          'Show "The meeting starts in" puts that line above the numbers. Number size makes the numbers smaller or larger.',
+        ],
+      },
+      {
+        heading: 'What you see while it runs',
+        paragraphs: [
+          'Each number rolls into place as it changes and the colon dims every second. The ring shows the time that is left, so it gets shorter. In the last 10 seconds the ring turns amber and gives a small beat each second, and at 00:00 two soft ripples spread out from it.',
+        ],
+        tip: 'If the stage PC struggles (the picture stutters), choose Motion: Plain. The still scene is much lighter work for the computer.',
+      },
+      {
+        heading: 'Your own colours',
+        paragraphs: [
+          'Open Settings > Stage look > Advanced and switch on "Use my own colours" to use the plain ring from earlier versions, with your own background, ring, glow and number colours. Colours you set before are kept. Switch it off to go back to the scene.',
+        ],
+      },
+    ],
+  },  {
     id: 'standalone',
     title: 'Without M³',
     summary: 'Use it as a plain countdown, with nothing else installed.',
@@ -61,7 +94,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         heading: 'Set it up',
         steps: [
           'Open Settings > Meeting Media Manager (M³) and switch "Control M³\'s media window" off.',
-          'The "M³ media" row on the controller disappears. Nothing else changes: you still get the same fade in and fade out.',
+          'The "M³ Media Display" row and badge on the controller disappear. Nothing else changes: you still get the same fade in and fade out.',
           'Choose the display in Settings and press Start.',
         ],
         tip: 'You can turn it back on at any time. Your shortcut and other settings are kept.',
@@ -92,14 +125,14 @@ export const HELP_TOPICS: HelpTopic[] = [
         steps: [
           'Open Settings > Meeting Media Manager (M³), make sure "Control M³\'s media window" is on, and press the Shortcut box and type the very same combination.',
           'Start M³ and open its media window, so that it is showing on the screen you chose.',
-          'Press Start. Watch the "M³ media" row on the controller: it says Hidden while the timer is up and Shown again afterwards.',
+          'Press Start. Watch the "M³ Media Display" badge on the controller: it says Hidden while the timer is up and Shown again afterwards.',
         ],
-        tip: 'The "M³ Media Display" badge always shows what M³\'s media window is really doing (Shown or Hidden), refreshed every couple of seconds. "Toggle" sends the shortcut now.',
+        tip: 'The "M³ Media Display" badge always shows what M³\'s media window is really doing (Shown or Hidden), refreshed every couple of seconds. The Hide / Show button next to it sends the shortcut now.',
       },
       {
         heading: 'While the countdown runs',
         paragraphs: [
-          'From the moment the countdown starts until it ends or you press Stop, the app keeps an eye on M³\'s media display. If it ever comes back on top of the timer (for example M³ shows a song or a picture), the app sends the shortcut again to hide it, and the row says "M³ was showing on top of the timer — hid it again". If you really need M³ on screen, press Stop first.',
+          'From the moment the countdown starts until it ends or you press Stop, the app keeps an eye on M³\'s media display. If it ever comes back on top of the timer (for example M³ shows a song or a picture), the app sends the shortcut again to hide it, and the M³ row says "M³ was showing on top of the timer — hid it again". If you really need M³ on screen, press Stop first.',
           'When the countdown ends (or you press Stop) the way back is deliberately gentle: the timer window fades to black and stays black for 3 seconds, then the shortcut brings M³\'s media display back so it fades in over the black, the timer window closes behind it, and (with OBS on) OBS fades back one second later. The app only brings M³ back if it was the one that hid it.',
           'For the smoothest result turn on M³\'s own fade: M³ Settings > "Enable Media Window Fade Transitions".',
         ],
@@ -116,7 +149,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         heading: 'If it does not work',
         paragraphs: [
-          'Red text next to the "M³ Media Display" badge says what failed, for example that the media display is still showing after the shortcut was sent. Check that the shortcut matches in both programs, that keyboard shortcuts are switched on in M³, and that M³ is open. The countdown itself always runs, even if M³ could not be reached.',
+          'Red text in the "M³ Media Display" row says what failed, for example that the media display is still showing after the shortcut was sent. Check that the shortcut matches in both programs, that keyboard shortcuts are switched on in M³, and that M³ is open. The countdown itself always runs, even if M³ could not be reached.',
         ],
       },
     ],

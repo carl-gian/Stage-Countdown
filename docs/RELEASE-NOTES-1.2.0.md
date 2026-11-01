@@ -9,6 +9,7 @@ live meeting (`docs/TEST-CHECKLIST.md`).
 - Keep `latest.yml` on this release: installed copies read it to find updates.
 
 ## What's new since 1.0.0
+- **New "Steward" look:** redesigned stage display, controller, settings, help and OBS dock.
 - **Smoother hand-back to M³:** the timer fades to black and holds black for 3 s, M³'s media display fades in over it, the timer window closes behind it, and OBS fades back last.
 - **OBS can return to the previous scene** (the one it was on before the countdown) instead of the Camera scene.
 - **M³ reliability:** if M³ ignores the shortcut the app hides/shows its media display directly; no more shortcut flood; the guard gives up with a clear message; the controller window is selected before the key press; new **Test the shortcut** button; clearer logs.

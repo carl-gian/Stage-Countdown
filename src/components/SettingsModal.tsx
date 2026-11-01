@@ -1,11 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Monitor, Palette, Circle, Type, Clock, Keyboard, CalendarClock, Video, Info, type LucideIcon } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import type { VisualSettings } from '@/types';
+import type { StageLook, VisualSettings } from '@/types';
 import { FONT_OPTIONS } from '@/types';
 import TimerDisplay, { DEFAULT_FONT_SIZE } from '@/components/TimerDisplay';
+import FitBox from '@/components/FitBox';
 import ScheduleSettings from '@/components/ScheduleSettings';
 import ObsSettings from '@/components/ObsSettings';
+import { Option, Seg, Switch } from '@/components/ui';
 
 interface SettingsModalProps {
   open: boolean;
@@ -101,24 +103,17 @@ function ShortcutRecorder({
   }, [recording, onChange]);
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-400 w-20">Shortcut</span>
+    <div className="sc-field-row">
+      <span className="sc-label">Shortcut</span>
       <button
+        type="button"
         onClick={() => setRecording(true)}
-        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-mono transition-colors border ${
-          recording
-            ? 'border-emerald-400 bg-emerald-500/10 text-emerald-300 animate-pulse'
-            : 'border-white/10 bg-white/5 text-gray-200 hover:bg-white/10'
-        }`}
+        className={`st-btn ${recording ? 'st-btn--soft' : 'st-btn--secondary'} sc-grow sc-kbd`}
       >
         {recording ? 'Press a key combo…' : formatShortcut(value)}
       </button>
       {!recording && (
-        <button
-          onClick={() => onChange(DEFAULT_SHORTCUT)}
-          title="Reset to default (Shift+Alt+F3)"
-          className="text-xs text-gray-500 hover:text-gray-300 px-1.5 shrink-0"
-        >
+        <button type="button" className="st-btn st-btn--quiet" onClick={() => onChange(DEFAULT_SHORTCUT)} title="Reset to default (Shift+Alt+F3)">
           Reset
         </button>
       )}
@@ -130,47 +125,34 @@ function M3TestMessage({ result }: { result: M3TestResult }) {
   const r = result;
   const [cls, text] =
     r.result === 'shortcut-ok'
-      ? ['text-emerald-400', `✓ It works: ${r.shortcut} made M³'s media display change from ${r.before} to ${r.after}, and it was put back.`]
+      ? ['sc-status-ok', `✓ It works: ${r.shortcut} made M³'s media display change from ${r.before} to ${r.after}, and it was put back.`]
       : r.result === 'direct-only'
-        ? ['text-amber-400', `⚠ M³ ignored ${r.shortcut}, but hiding its window directly worked, so the app will use that automatically. To fix the shortcut: it must match M³'s "Media Window" shortcut (M³ Settings → Interface & Shortcuts), keyboard shortcuts must be on in M³, and no M³ dialog may be open.`]
+        ? ['sc-status-warn', `⚠ M³ ignored ${r.shortcut}, but hiding its window directly worked, so the app will use that automatically. To fix the shortcut: it must match M³'s "Media Window" shortcut (M³ Settings → Interface & Shortcuts), keyboard shortcuts must be on in M³, and no M³ dialog may be open.`]
         : r.result === 'nothing-works'
-          ? ['text-red-400', `✗ Neither the shortcut (${r.shortcut}) nor hiding the window directly changed M³'s media display. ${r.error ?? ''}`]
+          ? ['sc-status-bad', `✗ Neither the shortcut (${r.shortcut}) nor hiding the window directly changed M³'s media display. ${r.error ?? ''}`]
           : r.result === 'no-window'
-            ? ['text-amber-400', `M³'s media window ("${r.title}") was not found. Open M³ and its media window, then test again.`]
+            ? ['sc-status-warn', `M³'s media window ("${r.title}") was not found. Open M³ and its media window, then test again.`]
             : r.result === 'cannot-read'
-              ? ['text-amber-400', "The app could not read M³'s window state (this only works on Windows)."]
-              : ['text-gray-400', 'Control of M³ is switched off.'];
-  return <p className={`text-[11px] leading-relaxed ${cls}`}>{text}</p>;
+              ? ['sc-status-warn', "The app could not read M³'s window state (this only works on Windows)."]
+              : ['', 'Control of M³ is switched off.'];
+  return <p className={`sc-hint ${cls}`} role="status">{text}</p>;
 }
 
-function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 mb-3">
-      <Icon size={14} />
-      <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">{title}</span>
-    </div>
+    <section className="sc-section">
+      <h3>{title}</h3>
+      <div className="st-card">{children}</div>
+    </section>
   );
 }
 
-function ColorInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function ColorInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-400 w-20">{label}</span>
-      <input
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-8 h-8 rounded cursor-pointer bg-transparent border border-white/10"
-      />
-      <span className="text-xs font-mono text-gray-500">{value}</span>
+    <div className="sc-field-row">
+      <span className="sc-label">{label}</span>
+      <input type="color" className="sc-color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} />
+      <span className="sc-kbd" style={{ color: 'var(--text-dim)', fontSize: 13 }}>{value}</span>
     </div>
   );
 }
@@ -195,40 +177,83 @@ function SliderInput({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-400 w-24">{label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="flex-1 accent-emerald-400 h-1"
-      />
-      <span className="text-xs font-mono text-gray-300 w-12 text-right">{format ? format(value) : `${value}${unit}`}</span>
+    <div className="sc-field-row">
+      <span className="sc-label">{label}</span>
+      <input type="range" className="sc-range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(parseFloat(e.target.value))} />
+      <span className="st-num" style={{ width: 44, textAlign: 'right', fontSize: 13, color: 'var(--text-dim)' }}>{format ? format(value) : `${value}${unit}`}</span>
     </div>
   );
 }
 
-// The real stage component, frozen at 3:15 of 5:00, so the preview always matches the stage.
-function MiniPreview({ visual }: { visual: VisualSettings }) {
-  const box = 168;
-  const bg = visual.background.mode === 'gradient'
-    ? `linear-gradient(135deg, ${visual.background.color1}, ${visual.background.color2})`
-    : visual.background.color1;
+/** The old colour, ring, glow and text settings, used by the "own colours" style. */
+function OwnColours({ visual, update }: { visual: VisualSettings; update: (patch: Partial<VisualSettings>) => void }) {
+  const onOff = (on: boolean): 'on' | 'off' => (on ? 'on' : 'off');
   return (
-    <div className="relative flex items-center justify-center rounded-xl overflow-hidden border border-white/10" style={{ width: box, height: box }}>
-      <div className="absolute inset-0" style={{ background: bg, opacity: visual.background.opacity }} />
-      <TimerDisplay
-        remainingMs={195_000}
-        totalMs={300_000}
-        endsAt={0}
-        state="idle"
-        visual={visual}
-        windowSize={{ width: box / 0.6 * 0.7, height: box / 0.6 * 0.7 }} /* leaves room around the ring for its glow */
-        hideStatus
-      />
+    <div className="sc-stack" style={{ marginTop: 12 }}>
+      <h4 style={{ margin: 0, fontSize: 13 }}>Background</h4>
+      <div className="sc-field-row">
+        <span className="sc-label">Mode</span>
+        <Seg
+          label="Background mode"
+          value={visual.background.mode}
+          options={[['solid', 'Solid'], ['gradient', 'Gradient']]}
+          onChange={(mode) => update({ background: { ...visual.background, mode } })}
+        />
+      </div>
+      <ColorInput label="Colour 1" value={visual.background.color1} onChange={(v) => update({ background: { ...visual.background, color1: v } })} />
+      {visual.background.mode === 'gradient' && (
+        <ColorInput label="Colour 2" value={visual.background.color2} onChange={(v) => update({ background: { ...visual.background, color2: v } })} />
+      )}
+      <SliderInput label="Opacity" value={visual.background.opacity} min={0.3} max={1} step={0.05} onChange={(v) => update({ background: { ...visual.background, opacity: v } })} />
+
+      <h4 style={{ margin: '8px 0 0', fontSize: 13 }}>Track ring</h4>
+      <ColorInput label="Colour" value={visual.trackRing.color} onChange={(v) => update({ trackRing: { ...visual.trackRing, color: v } })} />
+      <SliderInput label="Thickness" value={visual.trackRing.thickness} min={2} max={30} unit="px" onChange={(v) => update({ trackRing: { ...visual.trackRing, thickness: v } })} />
+
+      <h4 style={{ margin: '8px 0 0', fontSize: 13 }}>Progress ring</h4>
+      <ColorInput label="Colour 1" value={visual.progressRing.color1} onChange={(v) => update({ progressRing: { ...visual.progressRing, color1: v } })} />
+      <div className="sc-field-row">
+        <span className="sc-label">Gradient</span>
+        <Seg
+          label="Progress ring gradient"
+          value={onOff(visual.progressRing.gradient)}
+          options={[['on', 'On'], ['off', 'Off']]}
+          onChange={(v) => update({ progressRing: { ...visual.progressRing, gradient: v === 'on' } })}
+        />
+      </div>
+      {visual.progressRing.gradient && (
+        <ColorInput label="Colour 2" value={visual.progressRing.color2} onChange={(v) => update({ progressRing: { ...visual.progressRing, color2: v } })} />
+      )}
+      <SliderInput label="Thickness" value={visual.progressRing.thickness} min={2} max={30} unit="px" onChange={(v) => update({ progressRing: { ...visual.progressRing, thickness: v } })} />
+      <div className="sc-field-row">
+        <span className="sc-label">Glow</span>
+        <Seg
+          label="Progress ring glow"
+          value={onOff(visual.progressRing.glow)}
+          options={[['on', 'On'], ['off', 'Off']]}
+          onChange={(v) => update({ progressRing: { ...visual.progressRing, glow: v === 'on' } })}
+        />
+      </div>
+      {visual.progressRing.glow && (
+        <SliderInput label="Glow strength" value={visual.progressRing.glowIntensity} min={0} max={50} onChange={(v) => update({ progressRing: { ...visual.progressRing, glowIntensity: v } })} />
+      )}
+
+      <h4 style={{ margin: '8px 0 0', fontSize: 13 }}>Numbers</h4>
+      <div className="sc-field-row">
+        <span className="sc-label">Font</span>
+        <select
+          className="sc-select sc-grow"
+          value={visual.text.fontFamily}
+          onChange={(e) => update({ text: { ...visual.text, fontFamily: e.target.value } })}
+        >
+          {FONT_OPTIONS.map((f) => (
+            <option key={f} value={f}>{f.split(',')[0].replace(/'/g, '')}</option>
+          ))}
+        </select>
+      </div>
+      <ColorInput label="Colour" value={visual.text.color} onChange={(v) => update({ text: { ...visual.text, color: v } })} />
+      <SliderInput label="Size" value={visual.text.fontSize} min={24} max={60} format={(v) => `${Math.round((v / DEFAULT_FONT_SIZE) * 100)}%`} onChange={(v) => update({ text: { ...visual.text, fontSize: v } })} />
+      <SliderInput label="Shadow" value={visual.text.shadowIntensity} min={0} max={50} onChange={(v) => update({ text: { ...visual.text, shadowIntensity: v } })} />
     </div>
   );
 }
@@ -241,9 +266,11 @@ export default function SettingsModal({ open, onClose, visual, onChange, onM3Ena
   const [m3Test, setM3Test] = useState<{ running: boolean; result?: M3TestResult }>({ running: false });
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setAdvancedOpen(visual.stage.style === 'custom');
     if (window.electronAPI?.getDisplays) {
       window.electronAPI.getDisplays().then(setDisplays).catch(() => setDisplays([]));
     }
@@ -259,9 +286,12 @@ export default function SettingsModal({ open, onClose, visual, onChange, onM3Ena
       setUpdateInfo(i.update);
     });
     return window.electronAPI?.onUpdateStatus?.(setUpdateInfo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const update = (patch: Partial<VisualSettings>) => onChange({ ...visual, ...patch });
+  const setStage = (patch: Partial<StageLook>) => update({ stage: { ...visual.stage, ...patch } });
+  const custom = visual.stage.style === 'custom';
 
   const moveToDisplay = (id: string) => {
     setSelectedDisplayId(id);
@@ -289,266 +319,164 @@ export default function SettingsModal({ open, onClose, visual, onChange, onM3Ena
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="absolute inset-0 z-50 flex items-center justify-center"
-          onClick={onClose}
+          transition={{ duration: 0.15 }}
+          className="sc-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Settings"
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="sc-dialog__veil" onClick={onClose} />
           <motion.div
-            initial={{ scale: 0.92, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.92, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', damping: 22, stiffness: 300 }}
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md max-h-[85%] overflow-y-auto rounded-2xl border border-white/10 bg-[#12121a] shadow-2xl mx-4"
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            transition={{ duration: 0.2, ease: [0.2, 0.9, 0.3, 1] }}
+            className="sc-dialog__panel sc-dialog__panel--wide"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 sticky top-0 bg-[#12121a] z-10">
-              <h2 className="text-base font-bold text-white">Settings</h2>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                <X size={18} className="text-gray-400" />
+            <div className="sc-dialog__head">
+              <h2>Settings</h2>
+              <button className="st-btn st-btn--icon" onClick={onClose} aria-label="Close settings">
+                <X />
               </button>
             </div>
 
-            <div className="p-5 space-y-6">
-              {/* Live Preview */}
-              <div className="flex flex-col items-center gap-3 py-2">
-                <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">Live Preview</span>
-                <div className="relative">
-                  <MiniPreview visual={visual} />
+            <div className="sc-dialog__body">
+              <Section title="Stage look">
+                <FitBox className="sc-settings-preview">
+                  {/* The real stage component, frozen at 3:15 of 5:00, so the preview always matches the stage. */}
+                  <TimerDisplay remainingMs={195_000} totalMs={300_000} endsAt={0} state="idle" visual={visual} windowSize={{ width: 0, height: 0 }} />
+                </FitBox>
+                <div style={{ marginTop: 16 }}>
+                  <Option title="Scene" hint={custom ? 'Not used with your own colours' : 'Behind the countdown'}>
+                    <Seg label="Scene" value={visual.stage.scene} disabled={custom} options={[['mountains', 'Mountains'], ['meadow', 'Meadow'], ['lake', 'Lake']]} onChange={(scene) => setStage({ scene })} />
+                  </Option>
+                  <Option title="Look" hint="Day or night. Auto follows Windows">
+                    <Seg label="Look" value={visual.stage.look} disabled={custom} options={[['light', 'Light'], ['dark', 'Dark'], ['auto', 'Auto']]} onChange={(look) => setStage({ look })} />
+                  </Option>
+                  <Option title="Motion" hint="Plain: the scene stands still. Also when Windows asks for less motion">
+                    <Seg label="Motion" value={visual.stage.motion} disabled={custom} options={[['calm', 'Calm'], ['plain', 'Plain']]} onChange={(motion) => setStage({ motion })} />
+                  </Option>
+                  <Option title="Show “The meeting starts in”" hint="Above the numbers">
+                    <Switch label="Show the line above the numbers" checked={visual.stage.showKicker} disabled={custom} onChange={(showKicker) => setStage({ showKicker })} />
+                  </Option>
+                  <Option title="Number size">
+                    <Seg label="Number size" value={visual.stage.numberSize} disabled={custom} options={[['smaller', 'Smaller'], ['normal', 'Normal'], ['larger', 'Larger']]} onChange={(numberSize) => setStage({ numberSize })} />
+                  </Option>
+                  <Option title="Advanced" hint="Your own colours, glow and shadow">
+                    <button type="button" className="st-btn st-btn--quiet" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((v) => !v)}>
+                      {advancedOpen ? 'Close' : 'Open'}
+                    </button>
+                  </Option>
                 </div>
-              </div>
+                {advancedOpen && (
+                  <div className="sc-subcard">
+                    <Option title="Use my own colours" hint="Replaces the scene with a plain ring in the colours below">
+                      <Switch label="Use my own colours" checked={custom} onChange={(on) => setStage({ style: on ? 'custom' : 'scene' })} />
+                    </Option>
+                    <div className={custom ? undefined : 'sc-disabled'} aria-disabled={!custom}>
+                      <OwnColours visual={visual} update={update} />
+                    </div>
+                  </div>
+                )}
+              </Section>
 
-              {/* Display Selector */}
-              <div>
-                <SectionTitle icon={Monitor} title="Display" />
+              <Section title="Display">
                 {displays.length > 0 ? (
-                  <select
-                    value={selectedDisplayId}
-                    onChange={(e) => moveToDisplay(e.target.value)}
-                    className="w-full bg-white/5 text-gray-200 text-sm rounded-lg px-3 py-2 border border-white/10 outline-none"
-                  >
-                    <option value="" className="bg-[#12121a]">Automatic (first display that isn't this one)</option>
+                  <select className="sc-select" style={{ width: '100%' }} value={selectedDisplayId} onChange={(e) => moveToDisplay(e.target.value)} aria-label="Display">
+                    <option value="">Automatic (first display that isn't this one)</option>
                     {displays.map((d) => (
-                      <option key={d.id} value={String(d.id)} className="bg-[#12121a]">
+                      <option key={d.id} value={String(d.id)}>
                         {d.label}{d.primary ? ' (Primary)' : ''} — {d.bounds.width}×{d.bounds.height}
                       </option>
                     ))}
                   </select>
                 ) : (
-                  <div className="px-3 py-2 text-xs text-gray-500 rounded-lg bg-white/5">
-                    Display list available in Electron environment
-                  </div>
+                  <p className="sc-hint" style={{ marginTop: 0 }}>The display list is available in the desktop app.</p>
                 )}
-                <p className="text-[11px] text-gray-500 mt-1.5">
-                  Where the countdown appears. Automatic picks a display other than the one this controller is on.
-                </p>
-              </div>
+                <p className="sc-hint">Where the countdown appears. Automatic picks a display other than the one this controller is on.</p>
+              </Section>
 
-              {/* Meeting Media Manager */}
-              <div>
-                <SectionTitle icon={Keyboard} title="Meeting Media Manager (M³)" />
-                <p className="text-[11px] leading-relaxed text-gray-400 mb-2.5">
+              <Section title="Meeting Media Manager (M³)">
+                <p className="sc-hint" style={{ marginTop: 0, marginBottom: 8 }}>
                   If you use M³, the countdown hides its media window while it runs and gives it back afterwards, by sending M³'s
                   "Media Window" shortcut. Turn this off to use Stage Countdown on its own: nothing is hidden and no shortcut is sent.
                 </p>
-                <label className="flex items-center justify-between gap-4 cursor-pointer mb-3">
-                  <span className="text-sm font-semibold text-gray-200">Control M³'s media window</span>
-                  <input
-                    type="checkbox"
-                    checked={m3Enabled}
-                    onChange={(e) => updateM3Enabled(e.target.checked)}
-                    className="w-5 h-5 accent-emerald-500 shrink-0"
-                  />
-                </label>
-                <div className={`transition-opacity ${m3Enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                <Option title="Control M³'s media window">
+                  <Switch label="Control M³'s media window" checked={m3Enabled} onChange={updateM3Enabled} />
+                </Option>
+                <div className={`sc-stack ${m3Enabled ? '' : 'sc-disabled'}`} style={{ paddingTop: 12, borderTop: '1px solid var(--line)' }}>
                   <ShortcutRecorder value={hideShortcut} onChange={updateShortcut} />
-                  <div className="mt-2.5 flex items-start gap-2">
+                  <div>
                     <button
+                      type="button"
+                      className="st-btn st-btn--secondary"
                       disabled={m3Test.running}
                       onClick={() => {
                         setM3Test({ running: true });
                         window.electronAPI?.m3Test?.().then((result) => setM3Test({ running: false, result }));
                       }}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 shrink-0"
                       title="Presses the shortcut once and checks that M³'s media display really reacted, then puts it back"
                     >
                       {m3Test.running ? 'Testing…' : 'Test the shortcut'}
                     </button>
                     {m3Test.result && <M3TestMessage result={m3Test.result} />}
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-1.5">
-                    Must be the same as the "Media Window" shortcut in M³ (M³ Settings → Interface &amp; Shortcuts → turn on keyboard shortcuts).
-                    <button onClick={() => onOpenHelp?.('m3')} className="ml-1 text-emerald-400 hover:underline">How to set it up</button>
+                  <p className="sc-hint" style={{ marginTop: 0 }}>
+                    Must be the same as the "Media Window" shortcut in M³ (M³ Settings → Interface &amp; Shortcuts → turn on keyboard shortcuts).{' '}
+                    <button type="button" className="sc-link" onClick={() => onOpenHelp?.('m3')}>How to set it up</button>
                   </p>
                 </div>
-              </div>
+              </Section>
 
-              {/* Background */}
-              <div>
-                <SectionTitle icon={Palette} title="Background" />
-                <div className="space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-20">Mode</span>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => update({ background: { ...visual.background, mode: 'solid' } })}
-                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visual.background.mode === 'solid' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-gray-400'}`}
-                      >
-                        Solid
-                      </button>
-                      <button
-                        onClick={() => update({ background: { ...visual.background, mode: 'gradient' } })}
-                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visual.background.mode === 'gradient' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-gray-400'}`}
-                      >
-                        Gradient
-                      </button>
-                    </div>
-                  </div>
-                  <ColorInput label="Color 1" value={visual.background.color1} onChange={(v) => update({ background: { ...visual.background, color1: v } })} />
-                  {visual.background.mode === 'gradient' && (
-                    <ColorInput label="Color 2" value={visual.background.color2} onChange={(v) => update({ background: { ...visual.background, color2: v } })} />
-                  )}
-                  <SliderInput label="Opacity" value={visual.background.opacity} min={0.3} max={1} step={0.05} onChange={(v) => update({ background: { ...visual.background, opacity: v } })} />
-                </div>
-              </div>
-
-              {/* Track Ring */}
-              <div>
-                <SectionTitle icon={Circle} title="Track Ring" />
-                <div className="space-y-2.5">
-                  <ColorInput label="Color" value={visual.trackRing.color} onChange={(v) => update({ trackRing: { ...visual.trackRing, color: v } })} />
-                  <SliderInput label="Thickness" value={visual.trackRing.thickness} min={2} max={30} unit="px" onChange={(v) => update({ trackRing: { ...visual.trackRing, thickness: v } })} />
-                </div>
-              </div>
-
-              {/* Progress Ring */}
-              <div>
-                <SectionTitle icon={Circle} title="Progress Ring" />
-                <div className="space-y-2.5">
-                  <ColorInput label="Color 1" value={visual.progressRing.color1} onChange={(v) => update({ progressRing: { ...visual.progressRing, color1: v } })} />
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-20">Gradient</span>
-                    <button
-                      onClick={() => update({ progressRing: { ...visual.progressRing, gradient: !visual.progressRing.gradient } })}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visual.progressRing.gradient ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-gray-400'}`}
-                    >
-                      {visual.progressRing.gradient ? 'On' : 'Off'}
-                    </button>
-                  </div>
-                  {visual.progressRing.gradient && (
-                    <ColorInput label="Color 2" value={visual.progressRing.color2} onChange={(v) => update({ progressRing: { ...visual.progressRing, color2: v } })} />
-                  )}
-                  <SliderInput label="Thickness" value={visual.progressRing.thickness} min={2} max={30} unit="px" onChange={(v) => update({ progressRing: { ...visual.progressRing, thickness: v } })} />
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-20">Glow</span>
-                    <button
-                      onClick={() => update({ progressRing: { ...visual.progressRing, glow: !visual.progressRing.glow } })}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visual.progressRing.glow ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-gray-400'}`}
-                    >
-                      {visual.progressRing.glow ? 'On' : 'Off'}
-                    </button>
-                  </div>
-                  {visual.progressRing.glow && (
-                    <SliderInput label="Glow Intensity" value={visual.progressRing.glowIntensity} min={0} max={50} onChange={(v) => update({ progressRing: { ...visual.progressRing, glowIntensity: v } })} />
-                  )}
-                </div>
-              </div>
-
-              {/* Digital Text */}
-              <div>
-                <SectionTitle icon={Type} title="Digital Text" />
-                <div className="space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-20">Font</span>
-                    <select
-                      value={visual.text.fontFamily}
-                      onChange={(e) => update({ text: { ...visual.text, fontFamily: e.target.value } })}
-                      className="flex-1 bg-white/5 text-gray-200 text-xs rounded-lg px-2 py-1.5 border border-white/10 outline-none"
-                    >
-                      {FONT_OPTIONS.map((f) => (
-                        <option key={f} value={f} className="bg-[#12121a]">{f.split(',')[0].replace(/'/g, '')}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <ColorInput label="Text Color" value={visual.text.color} onChange={(v) => update({ text: { ...visual.text, color: v } })} />
-                  <SliderInput label="Font Size" value={visual.text.fontSize} min={24} max={60} format={(v) => `${Math.round((v / DEFAULT_FONT_SIZE) * 100)}%`} onChange={(v) => update({ text: { ...visual.text, fontSize: v } })} />
-                  <SliderInput label="Shadow" value={visual.text.shadowIntensity} min={0} max={50} onChange={(v) => update({ text: { ...visual.text, shadowIntensity: v } })} />
-                </div>
-              </div>
-
-              {/* OBS Scene Switching */}
-              <div>
-                <SectionTitle icon={Video} title="OBS Scene Switching" />
+              <Section title="OBS scene switching">
                 <ObsSettings />
-              </div>
+              </Section>
 
-              {/* Startup & Schedule */}
-              <div>
-                <SectionTitle icon={CalendarClock} title="Startup & Schedule" />
+              <Section title="Startup & schedule">
                 <ScheduleSettings />
-              </div>
+              </Section>
 
-              {/* Clock Format */}
-              <div>
-                <SectionTitle icon={Clock} title="Clock Format" />
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 w-20">Format</span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => update({ clock24h: true })}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${visual.clock24h ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-gray-400'}`}
-                    >
-                      24h
-                    </button>
-                    <button
-                      onClick={() => update({ clock24h: false })}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${!visual.clock24h ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-gray-400'}`}
-                    >
-                      12h
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <Section title="Clock">
+                <Option title="Clock format" hint="The clock in the top bar and the OBS dock">
+                  <Seg
+                    label="Clock format"
+                    value={visual.clock24h ? '24h' : '12h'}
+                    options={[['24h', '24 hour'], ['12h', '12 hour']]}
+                    onChange={(v) => update({ clock24h: v === '24h' })}
+                  />
+                </Option>
+              </Section>
 
-              {/* About & updates */}
-              <div>
-                <SectionTitle icon={Info} title="About & updates" />
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-gray-300">Stage Countdown {appInfo ? appInfo.version : ''}</span>
-                    <span className={`text-xs ${updateInfo?.status === 'ready' ? 'text-blue-300' : 'text-gray-500'}`}>
-                      {updateInfo?.status === 'ready' ? `Update ${updateInfo.version} ready`
-                        : updateInfo?.status === 'downloading' ? `Downloading update ${updateInfo.version} (${updateInfo.percent}%)`
-                        : updateInfo?.status === 'checking' ? 'Checking…'
-                        : updateInfo?.status === 'up-to-date' ? 'Up to date'
-                        : updateInfo?.status === 'error' ? 'Could not check'
-                        : updateInfo?.status === 'disabled' ? (updateInfo.reason === 'portable' ? 'Portable: no auto-update' : 'Updates off (dev run)')
-                        : ''}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => (updateInfo?.status === 'ready' ? window.electronAPI?.updateInstall?.() : window.electronAPI?.updateCheck?.())}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20"
-                    >
-                      {updateInfo?.status === 'ready' ? 'Restart and update…' : 'Check for updates'}
-                    </button>
-                    <button onClick={onShowWhatsNew} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20">
-                      What's new
-                    </button>
-                    <button onClick={() => onOpenHelp?.('start')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20">
-                      Help
-                    </button>
-                    <button onClick={() => window.electronAPI?.openLogs?.()} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 text-white hover:bg-white/20">
-                      Open logs folder
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-gray-500">
-                    The app checks for a new version every time it starts and downloads it quietly. It is never installed in the middle of a meeting
-                    without you choosing it (the blue "Update ready" badge, the tray menu) — or it installs when you quit.
-                  </p>
+              <Section title="About & updates">
+                <div className="sc-field-row" style={{ justifyContent: 'space-between' }}>
+                  <b>Stage Countdown {appInfo ? appInfo.version : ''}</b>
+                  <span style={{ fontSize: 13, color: updateInfo?.status === 'ready' ? 'var(--brand-strong)' : 'var(--text-dim)' }}>
+                    {updateInfo?.status === 'ready' ? `Update ${updateInfo.version} ready`
+                      : updateInfo?.status === 'downloading' ? `Downloading update ${updateInfo.version} (${updateInfo.percent}%)`
+                      : updateInfo?.status === 'checking' ? 'Checking…'
+                      : updateInfo?.status === 'up-to-date' ? 'Up to date'
+                      : updateInfo?.status === 'error' ? 'Could not check'
+                      : updateInfo?.status === 'disabled' ? (updateInfo.reason === 'portable' ? 'Portable: no auto-update' : 'Updates off (dev run)')
+                      : ''}
+                  </span>
                 </div>
-              </div>
+                <div className="flex flex-wrap gap-2" style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className={`st-btn ${updateInfo?.status === 'ready' ? 'st-btn--primary' : 'st-btn--secondary'}`}
+                    onClick={() => (updateInfo?.status === 'ready' ? window.electronAPI?.updateInstall?.() : window.electronAPI?.updateCheck?.())}
+                  >
+                    {updateInfo?.status === 'ready' ? 'Restart and update…' : 'Check for updates'}
+                  </button>
+                  <button type="button" className="st-btn st-btn--secondary" onClick={onShowWhatsNew}>What's new</button>
+                  <button type="button" className="st-btn st-btn--secondary" onClick={() => onOpenHelp?.('start')}>Help</button>
+                  <button type="button" className="st-btn st-btn--secondary" onClick={() => window.electronAPI?.openLogs?.()}>Open logs folder</button>
+                </div>
+                <p className="sc-hint">
+                  The app checks for a new version every time it starts and downloads it quietly. It is never installed in the middle of a meeting
+                  without you choosing it (the "Update ready" notice, the tray menu) — or it installs when you quit.
+                </p>
+              </Section>
             </div>
           </motion.div>
         </motion.div>

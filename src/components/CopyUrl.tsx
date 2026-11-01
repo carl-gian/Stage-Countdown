@@ -5,18 +5,20 @@ import { useState } from 'react';
 export default function CopyUrl({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-      <code className="flex-1 min-w-0 truncate text-xs text-emerald-300 select-text">{url}</code>
+    <div className="flex items-center gap-2" style={{ padding: '4px 4px 4px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--page)', boxShadow: '0 0 0 1.5px var(--line)' }}>
+      <code className="flex-1 min-w-0 truncate select-text sc-kbd" style={{ fontSize: 13, color: 'var(--brand-strong)' }}>{url}</code>
       <button
+        type="button"
+        className="st-btn st-btn--soft"
+        style={{ minHeight: 36 }}
         onClick={() => {
           navigator.clipboard?.writeText(url).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           });
         }}
-        className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white/10 text-white hover:bg-white/20 shrink-0"
       >
-        {copied ? <Check size={12} /> : <Copy size={12} />}
+        {copied ? <Check /> : <Copy />}
         {copied ? 'Copied' : 'Copy'}
       </button>
     </div>

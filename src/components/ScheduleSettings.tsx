@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Option, Switch } from '@/components/ui';
 
 // Mirrors the shape saved/read by main.cjs's app-settings.json. Add this
 // type to your types.ts if you'd rather import it than redeclare it.
@@ -61,95 +62,52 @@ export default function ScheduleSettings() {
 
   if (!loaded) return null;
 
+  const schedule = (patch: Partial<AppSettings['schedule']>) => commit({ ...settings, schedule: { ...settings.schedule, ...patch } });
+
   return (
-    <div className="flex flex-col gap-5">
-      {/* Start minimized */}
-      <label className="flex items-center justify-between gap-4 cursor-pointer">
-        <div>
-          <div className="text-sm font-semibold text-gray-200">Start hidden in the tray</div>
-          <div className="text-xs text-gray-500">
-            Open straight into the system tray instead of showing the window — applies to manual launches and Windows startup alike. Click the tray icon to show it.
-          </div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.startMinimized}
-          onChange={(e) => commit({ ...settings, startMinimized: e.target.checked })}
-          className="w-5 h-5 accent-emerald-500 shrink-0"
-        />
-      </label>
+    <div>
+      <Option
+        title="Start hidden in the tray"
+        hint="Open straight into the system tray instead of showing the window — applies to manual launches and Windows startup alike. Click the tray icon to show it."
+      >
+        <Switch label="Start hidden in the tray" checked={settings.startMinimized} onChange={(v) => commit({ ...settings, startMinimized: v })} />
+      </Option>
 
-      {/* Launch at boot */}
-      <label className="flex items-center justify-between gap-4 cursor-pointer">
-        <div>
-          <div className="text-sm font-semibold text-gray-200">Launch at Windows startup</div>
-          <div className="text-xs text-gray-500">
-            Registers Stage Countdown to start automatically when you log in — always hidden in the tray, regardless of the setting above.
-          </div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.autoLaunch}
-          onChange={(e) => commit({ ...settings, autoLaunch: e.target.checked })}
-          className="w-5 h-5 accent-emerald-500 shrink-0"
-        />
-      </label>
+      <Option
+        title="Launch at Windows startup"
+        hint="Registers Stage Countdown to start automatically when you log in — always hidden in the tray, regardless of the setting above."
+      >
+        <Switch label="Launch at Windows startup" checked={settings.autoLaunch} onChange={(v) => commit({ ...settings, autoLaunch: v })} />
+      </Option>
 
-      <div className="h-px bg-white/10" />
+      <Option
+        title="Scheduled auto-timer"
+        hint="Automatically runs the full Start sequence (hide display + countdown) at up to two times a day — even while minimized."
+      >
+        <Switch label="Scheduled auto-timer" checked={settings.schedule.enabled} onChange={(v) => schedule({ enabled: v })} />
+      </Option>
 
-      {/* Scheduled auto-timer */}
-      <div className="flex flex-col gap-3">
-        <label className="flex items-center justify-between gap-4 cursor-pointer">
-          <div>
-            <div className="text-sm font-semibold text-gray-200">Scheduled auto-timer</div>
-            <div className="text-xs text-gray-500">
-              Automatically runs the full Start sequence (hide display + countdown) at up to two times a day — even while minimized.
-            </div>
-          </div>
+      <div className={`grid grid-cols-2 gap-3 ${settings.schedule.enabled ? '' : 'sc-disabled'}`} style={{ paddingTop: 4 }}>
+        <label className="grid gap-1" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-dim)' }}>
+          Time 1
+          <input type="time" className="sc-input st-num" value={settings.schedule.time1} onChange={(e) => schedule({ time1: e.target.value })} />
+        </label>
+        <label className="grid gap-1" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-dim)' }}>
+          Time 2
+          <input type="time" className="sc-input st-num" value={settings.schedule.time2} onChange={(e) => schedule({ time2: e.target.value })} />
+        </label>
+        <label className="col-span-2 grid gap-1" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-dim)' }}>
+          Duration (minutes)
           <input
-            type="checkbox"
-            checked={settings.schedule.enabled}
-            onChange={(e) => commit({ ...settings, schedule: { ...settings.schedule, enabled: e.target.checked } })}
-            className="w-5 h-5 accent-emerald-500 shrink-0"
+            type="number"
+            min={1}
+            max={99}
+            className="sc-input st-num"
+            style={{ width: 96 }}
+            value={settings.schedule.durationMinutes}
+            onChange={(e) => schedule({ durationMinutes: Math.max(1, Math.min(99, parseInt(e.target.value) || 5)) })}
           />
         </label>
-
-        <div className={`grid grid-cols-2 gap-3 transition-opacity ${settings.schedule.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-gray-500 font-semibold">Time 1</span>
-            <input
-              type="time"
-              value={settings.schedule.time1}
-              onChange={(e) => commit({ ...settings, schedule: { ...settings.schedule, time1: e.target.value } })}
-              className="bg-gray-800 text-white rounded px-2 py-1.5 outline-none text-sm"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-gray-500 font-semibold">Time 2</span>
-            <input
-              type="time"
-              value={settings.schedule.time2}
-              onChange={(e) => commit({ ...settings, schedule: { ...settings.schedule, time2: e.target.value } })}
-              className="bg-gray-800 text-white rounded px-2 py-1.5 outline-none text-sm"
-            />
-          </div>
-          <div className="col-span-2 flex flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-gray-500 font-semibold">Duration (minutes)</span>
-            <input
-              type="number"
-              min={1}
-              max={99}
-              value={settings.schedule.durationMinutes}
-              onChange={(e) =>
-                commit({
-                  ...settings,
-                  schedule: { ...settings.schedule, durationMinutes: Math.max(1, Math.min(99, parseInt(e.target.value) || 5)) },
-                })
-              }
-              className="w-24 bg-gray-800 text-white rounded px-2 py-1.5 outline-none text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
-          </div>
-        </div>
       </div>
     </div>
   );

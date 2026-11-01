@@ -1,7 +1,9 @@
 import { useContext, useId, useLayoutEffect, useRef } from 'react';
-import { FitSizeContext } from '@/lib/fitSize';
+import { FitBoxContext, fitStageBox } from '@/lib/fitSize';
 import { type VisualSettings } from '@/types';
 import { formatCountdown } from '@/lib/time';
+import { useResolvedLook } from '@/lib/stageLook';
+import GlassCountdown from '@/components/stage/GlassCountdown';
 
 interface TimerDisplayProps {
   /** Frozen remaining time, used when the countdown is not running. */
@@ -12,7 +14,8 @@ interface TimerDisplayProps {
   state: string;
   visual: VisualSettings;
   windowSize: { width: number; height: number };
-  hideStatus?: boolean;
+  /** Stage window only: play the reveal (scene rises, ring draws in) when it appears. */
+  arrive?: boolean;
 }
 
 /** Ring size (px) on a 1080p display: 60% of 1080. */
@@ -20,20 +23,43 @@ const REFERENCE_RING_PX = 648;
 /** The Font Size setting is relative to this (48 = 100%). */
 export const DEFAULT_FONT_SIZE = 48;
 
-export default function TimerDisplay({
-  remainingMs,
-  totalMs,
-  endsAt,
-  state,
-  visual,
-  windowSize,
-  hideStatus = false,
-}: TimerDisplayProps) {
-  // The controller provides the ring size that fits its free space; the stage sizes from its (full-screen) window.
-  const fit = useContext(FitSizeContext);
-  const size = fit ?? Math.min(windowSize.width, windowSize.height) * 0.6;
-  // Pixel settings are defined at the 1080p stage ring and scale with the ring, so the controller
-  // preview, the Settings preview and the stage all look the same.
+/**
+ * The countdown, as on the stage screen. Inside a FitBoxContext (controller and Settings previews) it draws a 16:9
+ * copy of the stage that fits the free space, with the scene standing still; on the stage window it fills the screen.
+ * Style 'scene' = the Steward glass countdown over a nature scene; 'custom' = the older ring in the user's own colours.
+ */
+export default function TimerDisplay(props: TimerDisplayProps) {
+  const { visual, windowSize } = props;
+  const box = useContext(FitBoxContext);
+  const mode = useResolvedLook(visual.stage.look);
+  const scene = visual.stage.style === 'scene';
+
+  if (!box) {
+    if (scene) {
+      return <GlassCountdown {...props} look={visual.stage} mode={mode} arrive={props.arrive} className="absolute inset-0" />;
+    }
+    return <ClassicRing {...props} size={Math.min(windowSize.width, windowSize.height) * 0.6} />;
+  }
+
+  if (scene) {
+    // Pure CSS: the largest 16:9 box in the FitBox (a size container), so it follows every resize instantly.
+    return <GlassCountdown {...props} look={visual.stage} mode={mode} still className="sc-mini" />;
+  }
+  const { width, height } = fitStageBox(box.width, box.height);
+  const bg = visual.background.mode === 'gradient'
+    ? `linear-gradient(135deg, ${visual.background.color1}, ${visual.background.color2})`
+    : visual.background.color1;
+  return (
+    <div className="relative flex items-center justify-center overflow-hidden" style={{ width, height, borderRadius: 'var(--radius-md)', background: '#0a0a0f' }}>
+      <div className="absolute inset-0" style={{ background: bg, opacity: visual.background.opacity }} />
+      <ClassicRing {...props} size={height * 0.8} />
+    </div>
+  );
+}
+
+/** The ring from before the redesign, in the user's own colours (Settings > Stage look > Advanced). */
+function ClassicRing({ remainingMs, totalMs, endsAt, state, visual, size }: TimerDisplayProps & { size: number }) {
+  // Pixel settings are defined at the 1080p stage ring and scale with the ring, so the previews and the stage match.
   const k = size / REFERENCE_RING_PX;
   const ringThickness = (visual?.progressRing?.thickness || 10) * k;
   const trackThickness = (visual?.trackRing?.thickness || 2) * k;
@@ -129,15 +155,6 @@ export default function TimerDisplay({
             fontFeatureSettings: '"tnum" 1, "lnum" 1',
           }}
         />
-
-        {!hideStatus && (
-          <span
-            className="uppercase tracking-widest mt-2 opacity-60 font-semibold"
-            style={{ fontSize: size * 0.05 }}
-          >
-            {state}
-          </span>
-        )}
       </div>
     </div>
   );

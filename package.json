@@ -54,6 +54,7 @@
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
+    "@fontsource/noto-sans": "^5.3.0",
     "@supabase/supabase-js": "^2.57.4",
     "canvas-confetti": "^1.9.3",
     "electron-updater": "^6.8.11",
