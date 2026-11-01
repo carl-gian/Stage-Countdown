@@ -10,12 +10,23 @@ Automated tests cannot cover the M³ hand-off, so run this on the real PC after 
 - [ ] Schedule on with a time 2 minutes ahead: the timer starts by itself once, then not again that minute.
 - [ ] Start minimized / launch at startup behave as set.
 - [ ] Start with the stage window closed (e.g. right after a previous run): it reopens on the saved display by itself.
-- [ ] Stop M³ from being focusable (close M³) and press Start: an error shows in the "M³ media" row; the countdown still runs.
+- [ ] Stop M³ from being focusable (close M³) and press Start: an error shows in the "M³ Media Display" row; the countdown still runs.
 - [ ] Minimize the controller, schedule a start: the stage countdown keeps ticking and completes on time.
 - [ ] Close the controller window while the countdown runs: M³'s media comes back before the app exits.
-- [ ] "Countdown to Time": pick a time 3 min ahead, wait 1 min, press Start: it ends exactly at that time.
-- [ ] Press Start during the end sequence: nothing happens (no double toggle). "Toggle" / "Fix label" fix a desynced M³.
-- [ ] Timer end: two heartbeat pulses, fade to black, M³ back. Glow, track ring and text shadow settings show on the stage.
+- [ ] "Count down to a time": pick a time 3 min ahead, wait 1 min, press Start: it ends exactly at that time.
+- [ ] Press Start during the end sequence: nothing happens (no double toggle). The Hide / Show button in the M³ row fixes a desynced M³.
+- [ ] Timer end: two soft ripples around the ring, fade to black, M³ back. With Advanced › Use my own colours: two heartbeat pulses, and glow, track ring and text shadow show on the stage.
+
+## Steward redesign (stage look)
+- [ ] Stage: the scene fills the whole display (also on a 4:3 or 16:10 screen); ring, ticks and numbers stay centred together on the glass disc.
+- [ ] Start: black, then the scene rises in and the ring draws itself in; counting starts at the same moment as before.
+- [ ] Digits roll in one at a time with no overlapping numbers; the colon dims each second; the ring gets shorter as time runs out.
+- [ ] Last 10 s: ring amber with a small beat each second. 00:00: two ripples, the line above the numbers fades out.
+- [ ] Settings > Stage look: Scene, Look (Light / Dark / Auto: switch Windows dark mode), Motion, the line above the numbers and Number size change the preview and the stage live.
+- [ ] Motion Calm vs Plain: Plain stands still. Windows Settings > Accessibility > Visual effects > Animation effects off: the stage behaves as Plain.
+- [ ] **CPU/GPU on the hall PC** (Task Manager > Performance, GPU and CPU, during a 5 min countdown on the stage display): note Calm and Plain. If the picture stutters or the GPU sits near 100 %, use Plain and tell Caio.
+- [ ] Controller follows Windows light/dark; at the smallest window size (380 × 600) everything is reachable (scroll).
+- [ ] OBS dock (dark): pills, time left, Start / Pause / Stop work as before.
 
 ## Sequence timing (2026-10-27)
 - [ ] Start: M³ hides; ~0.5 s later the stage display goes black; ~1 s later the timer fades in showing the full time; ~2 s later it starts counting.
@@ -23,7 +34,7 @@ Automated tests cannot cover the M³ hand-off, so run this on the real PC after 
 - [ ] With "Close StageCountdown after timer ends" on: the button counts "Closing in 5s…" and the app quits; clicking the button during the count cancels it.
 - [ ] The stage display never takes keyboard focus and clicks on that display reach M³ while no countdown is running.
 - [ ] Pause then Restart: restarts immediately without hiding/showing M³ again.
-- [ ] Settings: colour / ring / glow / shadow / font-size changes show identically in the Settings preview, the controller and the stage.
+- [ ] Settings (Advanced › Use my own colours on): colour / ring / glow / shadow / font-size changes show identically in the Settings preview, the controller and the stage.
 - [ ] Settings > Startup & Schedule: change a schedule option after changing a colour, restart the app: both are kept.
 
 ## OBS scene switching (optional)
