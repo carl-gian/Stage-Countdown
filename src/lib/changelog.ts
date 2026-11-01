@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.2.0',
+    date: '2026-11-01',
+    items: [
+      'Rolls up everything since 1.0.0: smoother hand-back to M³ (3 s of black, M³ fades in over it, OBS returns last) and a new option for OBS to return to the scene it was on before the countdown.',
+      'M³ reliability: if M³ ignores the shortcut the app hides and shows its media display directly, no more shortcut flood, and a new "Test the shortcut" button in Settings.',
+      'Fixes: the glow around the ring is no longer cut off, the minutes and seconds boxes can no longer be squashed, and settings load and save reliably.',
+      'While OBS scene switching is on the app starts hidden in the tray (an option in OBS settings), and "Close after the timer ends" is locked while connected to OBS.',
+      'The README now has screenshots and demo animations.',
+    ],
+  },
+  {
     version: '1.0.7',
     date: '2026-10-31',
     items: [
