@@ -12,6 +12,10 @@
 //   2. if M3 still ignores it, hide/show the media window directly (Win32), so it can never stay on top of the timer;
 //   3. while a countdown runs a guard re-checks every ~1.5 s, and gives up (with a clear message) instead of
 //      hammering the keyboard if nothing works.
+//
+// M3 (TLC Edition) has an API for this (electron/m3api.cjs): when it answers, the state is read from it and hide/show
+// go through it instead of the shortcut (no focusing, no keys, not blocked by M3 dialogs). Everything else (verify,
+// retry, direct fallback, guard) is the same. When it does not answer (official M3) nothing changes.
 const { shortcutToKeys, describeShortcut } = require('./logic.cjs');
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -19,6 +23,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * @param {object} d
  * @param {(command: string, timeoutMs?: number) => Promise<string>} d.ps  the PowerShell worker
+ * @param {{state: () => Promise<string|null>, set: (visible: boolean) => Promise<boolean>}} [d.api] M3 (TLC Edition) API
  * @param {() => object} d.getConfig
  * @param {(...a: unknown[]) => void} [d.log]
  * @param {(status: object) => void} [d.onStatus] called when the visible status changes
@@ -30,7 +35,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
  * @param {number} [d.verifyStepMs]
  * @param {number} [d.focusSettleMs] pause between selecting M3's controller window and pressing the keys
  */
-function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs = 2000, guardMs = 1500, guardGiveUpAfter = 3, guardBackoffMs = 5000, verifyMs = 2000, verifyStepMs = 150, focusSettleMs = 250 }) {
+function createM3({ ps, api = null, getConfig, log = () => {}, onStatus = () => {}, pollMs = 2000, guardMs = 1500, guardGiveUpAfter = 3, guardBackoffMs = 5000, verifyMs = 2000, verifyStepMs = 150, focusSettleMs = 250 }) {
   let media = 'unknown'; // shown | hidden | none (no media window at all) | unknown (cannot read it)
   let hiddenByUs = false; // we hid it, so we are the ones to bring it back
   let hiddenVia = ''; // 'shortcut' | 'window': how we hid it (a window hidden directly must be shown directly)
@@ -46,10 +51,12 @@ function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs =
   let guardFails = 0;
   let guardPausedUntil = 0;
   let lastEmitted = '';
+  let via = ''; // 'api' when M3 (TLC Edition)'s API answered the last read, else 'window' (PowerShell)
 
   const enabled = () => getConfig().m3.enabled !== false;
   const directFallbackOn = () => getConfig().m3.directFallback !== false;
   const title = () => getConfig().m3MediaWindowTitle;
+  const apiOn = () => !!api && getConfig().m3.useApi !== false;
 
   const status = (ok = true, error = '') => ({
     ok,
@@ -86,6 +93,18 @@ function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs =
       media = 'unknown';
       return 'unknown';
     }
+    if (apiOn()) {
+      const a = await api.state();
+      if (a) {
+        if (via !== 'api') log('[m3] M3 (TLC Edition) API found: using it instead of the shortcut');
+        via = 'api';
+        media = a;
+        emit();
+        return media;
+      }
+      if (via === 'api') log('[m3] M3 (TLC Edition) API stopped answering: back to the shortcut');
+    }
+    via = 'window';
     const r = await ps(`state|${title()}`, 2500);
     media = r === 'shown' || r === 'hidden' || r === 'none' ? r : 'unknown';
     emit();
@@ -136,6 +155,20 @@ function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs =
     return null;
   }
 
+  /**
+   * Asks M3 to show (true) or hide (false) its media display: through the API when M3 (TLC Edition) answered the
+   * last read, else by pressing the shortcut (a toggle, only called when the state is the opposite). Returns an error
+   * text or null.
+   */
+  async function press(wantShown) {
+    if (via === 'api') {
+      log(`[m3] asking M3 (TLC Edition) to ${wantShown ? 'show' : 'hide'} its media display`);
+      if (await api.set(wantShown)) return null;
+      log('[m3] M3 (TLC Edition) did not accept the request - pressing the shortcut instead');
+    }
+    return sendKey();
+  }
+
   /** Hides or shows the media window directly, bypassing M3's shortcut. Returns true if the window's state changed as wanted. */
   async function direct(wantShown) {
     const r = await ps(`${wantShown ? 'show' : 'hide'}|${title()}`, 2500);
@@ -174,7 +207,7 @@ function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs =
     if (s !== 'shown') return ok(); // nothing is covering the screen: nothing to hide
 
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const err = await sendKey();
+      const err = await press(false);
       if (err) return fail(err);
       if ((await waitFor((x) => x !== 'shown')) !== 'shown') {
         hiddenByUs = true;
@@ -222,7 +255,7 @@ function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs =
     if (hiddenVia === 'window' && (await direct(true))) return done();
 
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const err = await sendKey();
+      const err = await press(true);
       if (err) return fail(err);
       if ((await waitFor((x) => x === 'shown')) === 'shown') return done();
       log(`[m3] the media display did not come back after the shortcut (attempt ${attempt})`);
@@ -277,15 +310,16 @@ function createM3({ ps, getConfig, log = () => {}, onStatus = () => {}, pollMs =
       if (before === 'unknown') return { ...report, result: 'cannot-read' };
       if (before === 'none') return { ...report, result: 'no-window' };
 
-      const err = await sendKey();
+      const err = await press(before !== 'shown');
       if (err) return { ...report, result: 'nothing-works', error: err };
       const after = await waitFor((x) => x !== before);
       report.after = after;
       if (after !== before) {
-        // The shortcut works. Put M3 back as it was.
-        await sendKey();
+        // It works. Put M3 back as it was.
+        const usedApi = via === 'api';
+        await press(before === 'shown');
         await waitFor((x) => x === before);
-        return { ...report, result: 'shortcut-ok' };
+        return { ...report, result: usedApi ? 'api-ok' : 'shortcut-ok' };
       }
 
       // The shortcut changed nothing. Does the direct method work?

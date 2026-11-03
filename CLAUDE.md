@@ -43,6 +43,10 @@ M³'s "Media Window" shortcut is a TOGGLE, so we never trust a remembered state:
   keyboard. On from the first hide until the hand-back begins (App.tsx).
 - A 2 s background refresh keeps the "M³ Media Display Shown / Hidden" badge truthful (also after changes made by hand). The wording lives in `src/lib/m3label.ts` (tested); "not open" counts as Hidden.
 - Only if the state cannot be read (non-Windows, worker down) does it fall back to the old remembered toggle ("(assumed)").
+- **M³ (TLC Edition) API** (`electron/m3api.cjs`, `http://127.0.0.1:4579/api/media-display`): when it answers, the state is
+  read from it and hide/show go through it (`POST {visible}`, header `X-M3-Dock: 1`) instead of focusing M³ and pressing the
+  shortcut; it also works while an M³ dialog is open. Verify, retry, direct fallback and guard are unchanged. If it does not
+  answer (official M³) or refuses, the shortcut is used as before. `m3.useApi = false` turns it off. Test reports `api-ok`.
 - Closing the controller while we hold M³ hidden restores it first. `m3.enabled = false` = standalone: nothing is read or sent.
 
 ## 2. Sequences (src/App.tsx) — owner-specified timings, all in `src/lib/sequence.ts`
@@ -109,6 +113,7 @@ Zoom, so participants see the timer (Media Display scene) and then the camera ag
 
 ```
 electron/main.cjs      windows, IPC handlers, PowerShell (focus + hotkey), config file, scheduler, login item
+electron/m3api.cjs     client for M³ (TLC Edition)'s media display API (no Electron imports)
 electron/obs.cjs       optional OBS WebSocket scene switching (no Electron imports)
 electron/dock.cjs      OBS custom-dock HTTP server (+ dock-page.cjs, the page)
 electron/updater.cjs   electron-updater wrapper (never auto-installs)

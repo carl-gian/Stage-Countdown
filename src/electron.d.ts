@@ -20,7 +20,7 @@ interface M3Status {
 
 /** Result of Settings > M³ > Test. */
 interface M3TestResult {
-  result: 'shortcut-ok' | 'direct-only' | 'nothing-works' | 'no-window' | 'cannot-read' | 'off';
+  result: 'api-ok' | 'shortcut-ok' | 'direct-only' | 'nothing-works' | 'no-window' | 'cannot-read' | 'off';
   shortcut: string;
   title: string;
   before?: string;

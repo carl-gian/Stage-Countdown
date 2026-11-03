@@ -18,7 +18,8 @@ const DEFAULT_CONFIG = {
   // Meeting Media Manager hand-off. Off = a standalone countdown (nothing is hidden/shown, no shortcut is sent).
   // directFallback: if M3 ignores the shortcut, hide/show its media window directly (Win32) so it can never stay on top.
   // focusController: select M3's own window ("Meeting media - M3") before pressing the shortcut.
-  m3: { enabled: true, directFallback: true, focusController: true },
+  // useApi: use M3 (TLC Edition)'s media display API when it answers (electron/m3api.cjs), else the shortcut.
+  m3: { enabled: true, directFallback: true, focusController: true, useApi: true },
   lastSeenVersion: '',
   obsPasswordEnc: '',
 };

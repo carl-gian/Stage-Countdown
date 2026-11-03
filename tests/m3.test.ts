@@ -36,10 +36,27 @@ afterEach(() => {
   while (cleanup.length) cleanup.pop()!();
 });
 
-function make(sim: ReturnType<typeof fakeM3>, enabled = true, m3Extra: Record<string, unknown> = {}) {
+/** M3 (TLC Edition)'s media display API on top of a simulated M3: sets the state directly, even with a dialog open. */
+function fakeApi(sim: ReturnType<typeof fakeM3>, opts: { answers?: boolean; accepts?: boolean } = {}) {
+  const sets: boolean[] = [];
+  const api = {
+    answers: opts.answers ?? true,
+    state: async () => (!api.answers ? null : !sim.win.exists ? 'none' : sim.win.visible ? 'shown' : 'hidden'),
+    set: async (visible: boolean) => {
+      if (!api.answers || opts.accepts === false) return false;
+      sets.push(visible);
+      setTimeout(() => (sim.win.visible = visible), 20); // M3 fades, then sets it
+      return true;
+    },
+  };
+  return { api, sets };
+}
+
+function make(sim: ReturnType<typeof fakeM3>, enabled = true, m3Extra: Record<string, unknown> = {}, api: unknown = null) {
   const statuses: Record<string, unknown>[] = [];
   const m3 = createM3({
     ps: sim.ps,
+    api,
     getConfig: () => ({ m3: { enabled, ...m3Extra }, m3WindowTitle: 'Meeting media - M', m3MediaWindowTitle: 'Media Player - M', hideShortcut: { code: 'F3', alt: true, shift: true, ctrl: false } }),
     onStatus: (s: Record<string, unknown>) => statuses.push(s),
     verifyMs: 400,
@@ -278,5 +295,73 @@ describe('status for the UI', () => {
     sim.win.visible = false;
     await sleep(150);
     expect(statuses.at(-1)).toMatchObject({ media: 'hidden', hidden: true });
+  });
+});
+
+describe('M3 (TLC Edition) API', () => {
+  it('hides and brings back the media display through the API: no focusing, no keys', async () => {
+    const sim = fakeM3({ visible: true });
+    const { api, sets } = fakeApi(sim);
+    const { m3 } = make(sim, true, {}, api);
+
+    expect(await m3.hide()).toMatchObject({ ok: true, media: 'hidden', hidden: true });
+    expect(await m3.show()).toMatchObject({ ok: true, media: 'shown' });
+    expect(sets).toEqual([false, true]);
+    expect(sim.keys()).toBe(0);
+    expect(sim.calls).not.toContain('focus');
+    expect(sim.calls).not.toContain('state'); // the API is the source of truth
+  });
+
+  it('uses the shortcut as before when the API does not answer (official M3)', async () => {
+    const sim = fakeM3({ visible: true });
+    const { api, sets } = fakeApi(sim, { answers: false });
+    const { m3 } = make(sim, true, {}, api);
+
+    expect(await m3.hide()).toMatchObject({ ok: true, media: 'hidden' });
+    expect(sets).toEqual([]);
+    expect(sim.keys()).toBe(1);
+    expect(sim.calls).toContain('focus');
+  });
+
+  it('presses the shortcut when M3 (TLC Edition) does not accept the request', async () => {
+    const sim = fakeM3({ visible: true });
+    const { api } = fakeApi(sim, { accepts: false });
+    const { m3 } = make(sim, true, {}, api);
+
+    expect(await m3.hide()).toMatchObject({ ok: true, media: 'hidden' });
+    expect(sim.keys()).toBe(1);
+  });
+
+  it('can be switched off (m3.useApi = false)', async () => {
+    const sim = fakeM3({ visible: true });
+    const { api, sets } = fakeApi(sim);
+    const { m3 } = make(sim, true, { useApi: false }, api);
+
+    await m3.hide();
+    expect(sets).toEqual([]);
+    expect(sim.keys()).toBe(1);
+  });
+
+  it('the guard hides it again through the API', async () => {
+    const sim = fakeM3({ visible: false });
+    const { api, sets } = fakeApi(sim);
+    const { m3 } = make(sim, true, {}, api);
+    m3.startGuard();
+    sim.win.visible = true; // someone showed M3 during the countdown
+    await until(() => sim.win.visible === false);
+    m3.stopGuard();
+    expect(sets).toContain(false);
+    expect(sim.keys()).toBe(0);
+  });
+
+  it('Settings > Test reports that the API works, and leaves M3 as it was', async () => {
+    const sim = fakeM3({ visible: true });
+    const { api, sets } = fakeApi(sim);
+    const { m3 } = make(sim, true, {}, api);
+
+    expect(await m3.test()).toMatchObject({ result: 'api-ok', before: 'shown', after: 'hidden' });
+    expect(sets).toEqual([false, true]);
+    expect(sim.win.visible).toBe(true);
+    expect(sim.keys()).toBe(0);
   });
 });

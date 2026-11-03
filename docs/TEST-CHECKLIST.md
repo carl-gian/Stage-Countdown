@@ -87,3 +87,12 @@ In OBS: Tools -> WebSocket Server Settings -> enable (note port and password). M
 - [ ] While counting, bring M³'s media display back by hand: it is hidden again within a few seconds, and the log shows only a few presses (not one every few seconds forever).
 - [ ] Open the log (tray > Open logs folder): each M³ action shows "sending the shortcut Alt + Shift + F3 (virtual key 114; controller window: OK)" and, on failures, the list of windows found. If "controller window" says FAIL, note which (focus = Windows refused, nowindow = "Meeting media - M³" is hidden/not found).
 - [ ] M³'s controller window ("Meeting media - M³") is brought to the front when the shortcut is sent (and the shortcut still works if you keep it hidden in the tray).
+
+## M³ (TLC Edition) API (hide/show without the shortcut)
+With **M³ (TLC Edition)** installed instead of the official M³:
+- [ ] Settings > M³ > Test: "✓ It works: M³ (TLC Edition) changed its media display … through its own connection". M³'s window is NOT brought to the front.
+- [ ] Start and Stop/finish: M³'s media display hides and comes back exactly as before (same timings), with M³'s window hidden in the tray.
+- [ ] Open an M³ dialog (e.g. Settings) and press Start: it still hides (the shortcut would have been ignored).
+- [ ] While the timer runs, show M³'s media display from M³ or its OBS dock: the guard hides it again within ~1.5-3 s.
+- [ ] The log (`userData/logs/stagecountdown.log`) says "M3 (TLC Edition) API found: using it instead of the shortcut".
+- [ ] Quit M³ (TLC Edition) and start the official M³ instead: everything works through the shortcut again (log: "back to the shortcut").

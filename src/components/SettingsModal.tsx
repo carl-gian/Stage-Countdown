@@ -124,7 +124,9 @@ function ShortcutRecorder({
 function M3TestMessage({ result }: { result: M3TestResult }) {
   const r = result;
   const [cls, text] =
-    r.result === 'shortcut-ok'
+    r.result === 'api-ok'
+      ? ['sc-status-ok', `✓ It works: M³ (TLC Edition) changed its media display from ${r.before} to ${r.after} through its own connection (no keyboard shortcut needed), and it was put back.`]
+      : r.result === 'shortcut-ok'
       ? ['sc-status-ok', `✓ It works: ${r.shortcut} made M³'s media display change from ${r.before} to ${r.after}, and it was put back.`]
       : r.result === 'direct-only'
         ? ['sc-status-warn', `⚠ M³ ignored ${r.shortcut}, but hiding its window directly worked, so the app will use that automatically. To fix the shortcut: it must match M³'s "Media Window" shortcut (M³ Settings → Interface & Shortcuts), keyboard shortcuts must be on in M³, and no M³ dialog may be open.`]

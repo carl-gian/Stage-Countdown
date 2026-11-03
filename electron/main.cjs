@@ -8,6 +8,7 @@ const { createObs } = require('./obs.cjs');
 const { createDock } = require('./dock.cjs');
 const { createUpdater } = require('./updater.cjs');
 const { createM3 } = require('./m3.cjs');
+const { createM3Api } = require('./m3api.cjs');
 
 app.setAppUserModelId('com.stagecountdown.app'); // Windows notifications + taskbar identity
 
@@ -491,8 +492,10 @@ async function psSend(command, timeoutMs = 4000) {
 // --- M3 HIDE/SHOW (see electron/m3.cjs) -------------------------------------
 // Reads the REAL state of M3's media window ("Media Player - M3") instead of trusting a remembered toggle, verifies
 // every shortcut, and while a countdown runs a guard hides it again if it comes back on top of the timer.
+// M3 (TLC Edition) is controlled through its API when it answers (electron/m3api.cjs); the official M3 by shortcut.
 const m3 = createM3({
   ps: (command, timeoutMs) => psSend(command, timeoutMs),
+  api: createM3Api(),
   getConfig: loadConfig,
   log: (...a) => log.info(...a),
   onStatus: (status) => sendToController('m3-status', status),
